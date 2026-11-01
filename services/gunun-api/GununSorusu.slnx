@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/GununSorusu.Api/GununSorusu.Api.csproj" />
+    <Project Path="src/GununSorusu.Domain/GununSorusu.Domain.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/GununSorusu.Api.Tests/GununSorusu.Api.Tests.csproj" />
+    <Project Path="tests/GununSorusu.Domain.Tests/GununSorusu.Domain.Tests.csproj" />
+  </Folder>
+</Solution>

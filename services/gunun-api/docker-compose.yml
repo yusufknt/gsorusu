@@ -1,0 +1,42 @@
+﻿# Yerel geliÅŸtirme ortamÄ±.
+#   YalnÄ±zca veritabanÄ±:   docker compose up -d db      (API'yi `dotnet run` ile Ã§alÄ±ÅŸtÄ±r)
+#   VeritabanÄ± + API:      docker compose up -d --build
+# Ãœretim compose dosyasÄ± ayrÄ± tutulacak (daÄŸÄ±tÄ±m aÅŸamasÄ±).
+name: gunun
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: gunun
+      POSTGRES_USER: gunun
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gunun_dev}
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - gunun-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gunun -d gunun"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    mem_limit: 512m
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: src/GununSorusu.Api/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__Gunun: "Host=db;Port=5432;Database=gunun;Username=gunun;Password=${POSTGRES_PASSWORD:-gunun_dev}"
+    ports:
+      - "127.0.0.1:5080:8080"  # 8080 bu makinede Oracle TNS dinleyicisinde
+    depends_on:
+      db:
+        condition: service_healthy
+    mem_limit: 300m
+    restart: unless-stopped
+
+volumes:
+  gunun-db:

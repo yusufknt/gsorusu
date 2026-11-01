@@ -1,0 +1,30 @@
+# .NET
+bin/
+obj/
+*.user
+TestResults/
+
+# Node / Expo
+node_modules/
+.expo/
+dist/
+web-build/
+*.tsbuildinfo
+.env*.local
+
+# Yerel sırlar
+.env
+*.pem
+*.p8
+*.p12
+*.jks
+*.keystore
+google-services.json
+GoogleService-Info.plist
+
+# IDE / OS
+.vs/
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

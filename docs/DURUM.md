@@ -1,6 +1,7 @@
 # Nerede kaldık? — Günün Sorusu ?
 
 > Son güncelleme: **2 Kasım 2026**. Yeni oturumda "nerede kaldık?" sorusunun cevabı bu dosyadır.
+> Kod deposu: https://github.com/fxlonq/gununsorusu (`main`, 4 Kasım 2026'da ilk kez gönderildi).
 > Ayrıntılı teknik kararlar: [`kararlar.md`](kararlar.md) (#1–50). Ürün planı: `../Gunun-Sorusu-Plan-v2.pdf`.
 
 ## Çalışma ilkeleri (birlikte karar verdiklerimiz)

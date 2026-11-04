@@ -5,6 +5,7 @@ import { PixelRatio, StyleSheet, Text, View } from 'react-native';
 import ViewShot, { type ViewShotRef } from 'react-native-view-shot';
 
 import type { PlayState } from '@/api/types';
+import { BrandMark } from '@/components/BrandMark';
 import { Icon, type IconName } from '@/components/ui';
 import { FORMAT_LABEL, formatDay } from '@/lib/format';
 import { SHARE_HOST, shareParts } from '@/lib/share';
@@ -25,9 +26,17 @@ export function ShareCard({ play, streak, colors, ref }: { play: PlayState; stre
     <View style={styles.offscreen} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
       <ViewShot ref={ref} options={{ format: 'png', quality: 1, result: 'tmpfile', width: 1080 / ratio, height: 1920 / ratio }}>
         <LinearGradient colors={[colors.heroFrom, colors.heroTo]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.card}>
-          <Text style={styles.bigMark}>?</Text>
+          <View style={styles.bigMark}>
+            <BrandMark size={420} sun={false} opacity={0.12} />
+          </View>
           <View style={{ gap: 6 }}>
-            <Text style={styles.brand}>Günün Sorusu ?</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              {/* Uygulama simgesi: hikâyeyi gören, mağazada aynı simgeyi tanısın. */}
+              <View style={styles.badge}>
+                <BrandMark size={44} variant="icon" />
+              </View>
+              <Text style={styles.brand}>Günün Sorusu ?</Text>
+            </View>
             <Text style={styles.meta}>
               #{play.no} · {formatDay(play.day)}
             </Text>
@@ -67,7 +76,8 @@ export async function shareCardImage(shot: ViewShotRef | null): Promise<void> {
 const styles = StyleSheet.create({
   offscreen: { position: 'absolute', left: -10_000, top: 0, width: W, height: H },
   card: { width: W, height: H, padding: 32, justifyContent: 'space-between', overflow: 'hidden' },
-  bigMark: { position: 'absolute', right: -30, top: 40, fontFamily: fonts.black, fontSize: 380, color: '#FFFFFF', opacity: 0.1 },
+  bigMark: { position: 'absolute', right: -110, top: 10 },
+  badge: { borderRadius: 12, borderWidth: 2, borderColor: 'rgba(255,255,255,0.6)', overflow: 'hidden' },
   brand: { fontFamily: fonts.black, fontSize: 34, color: '#FFFFFF' },
   meta: { fontFamily: fonts.bold, fontSize: 17, color: '#FFFFFF', opacity: 0.9 },
   panel: { backgroundColor: '#FFFFFF', borderRadius: 28, paddingVertical: 28, paddingHorizontal: 18, alignItems: 'center', gap: 16 },

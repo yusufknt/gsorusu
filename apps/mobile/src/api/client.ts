@@ -117,7 +117,7 @@ async function toApiError(res: Response): Promise<ApiError> {
 }
 
 /** Oturum gerekiyorsa açar; jeton süresi dolmuşsa aynı cihaz kimliğiyle sessizce yeniler. */
-export async function api<T>(method: 'GET' | 'POST' | 'PATCH' | 'PUT', path: string, body?: unknown): Promise<T> {
+export async function api<T>(method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE', path: string, body?: unknown): Promise<T> {
   if (IS_MOCK) {
     try {
       return await mockApi<T>(method, path, body);
@@ -137,5 +137,6 @@ export async function api<T>(method: 'GET' | 'POST' | 'PATCH' | 'PUT', path: str
     res = await send(method, path, body, await authenticate());
     if (res.status === 401) throw await toApiError(res);
   }
-  return (await res.json()) as T;
+  // 204: gövdesiz başarı (ör. ligden ayrılma).
+  return res.status === 204 ? (undefined as T) : ((await res.json()) as T);
 }

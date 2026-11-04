@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import type { PlayState } from '../api/types';
-import { shareText } from './share';
+import { leagueInviteText, shareText } from './share';
 
 const base: PlayState = {
   questionId: 1,
@@ -102,4 +102,8 @@ test('bilgi: süre ve sonuç', () => {
     shareText({ ...base, format: 'trivia', solved: false, score: 0, trivia: { ...t, chosenOption: null, timedOut: true } }, 1),
     /⏱️ süre doldu/,
   );
+});
+
+test('lig daveti kodu okunaklı yazar ve bağlantı verir', () => {
+  assert.equal(leagueInviteText('Ofis', 'K7P2QX'), 'Günün Sorusu ? ligime katıl: Ofis\nKod: K7P 2QX\ngununsorusu.app/lig/K7P2QX');
 });

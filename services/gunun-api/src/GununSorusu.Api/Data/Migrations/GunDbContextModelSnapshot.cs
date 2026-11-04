@@ -23,6 +23,70 @@ namespace GununSorusu.Api.Data.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("GununSorusu.Api.Data.League", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(6)
+                        .HasColumnType("character(6)")
+                        .HasColumnName("code")
+                        .IsFixedLength();
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("name");
+
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_leagues");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("ix_leagues_code");
+
+                    b.HasIndex("OwnerId")
+                        .HasDatabaseName("ix_leagues_owner_id");
+
+                    b.ToTable("leagues", (string)null);
+                });
+
+            modelBuilder.Entity("GununSorusu.Api.Data.LeagueMember", b =>
+                {
+                    b.Property<Guid>("LeagueId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("league_id");
+
+                    b.Property<Guid>("PlayerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("player_id");
+
+                    b.Property<DateTimeOffset>("JoinedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("joined_at");
+
+                    b.HasKey("LeagueId", "PlayerId")
+                        .HasName("pk_league_members");
+
+                    b.HasIndex("PlayerId")
+                        .HasDatabaseName("ix_league_members_player_id");
+
+                    b.ToTable("league_members", (string)null);
+                });
+
             modelBuilder.Entity("GununSorusu.Api.Data.Play", b =>
                 {
                     b.Property<Guid>("PlayerId")
@@ -389,6 +453,33 @@ namespace GununSorusu.Api.Data.Migrations
                         .HasName("pk_question_crowd");
 
                     b.ToTable("question_crowd", (string)null);
+                });
+
+            modelBuilder.Entity("GununSorusu.Api.Data.League", b =>
+                {
+                    b.HasOne("GununSorusu.Api.Data.Player", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_leagues_players_owner_id");
+                });
+
+            modelBuilder.Entity("GununSorusu.Api.Data.LeagueMember", b =>
+                {
+                    b.HasOne("GununSorusu.Api.Data.League", null)
+                        .WithMany()
+                        .HasForeignKey("LeagueId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_league_members_leagues_league_id");
+
+                    b.HasOne("GununSorusu.Api.Data.Player", null)
+                        .WithMany()
+                        .HasForeignKey("PlayerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_league_members_players_player_id");
                 });
 
             modelBuilder.Entity("GununSorusu.Api.Data.Play", b =>

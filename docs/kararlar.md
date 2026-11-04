@@ -51,3 +51,40 @@
 | 34 | Yazı tipi ve tema | Nunito (Türkçe karakterler tam); açık/koyu/sistem teması ve titreşim cihazda saklanır | Sıcak, oyunsu kimlik; tercihler sunucu gerektirmez. |
 | 35 | Hatırlatma | Yerel bildirim: seçilen saatte günlük + seri tehlikedeyse 21:00 (Expo Go'da çalışır) | Plan A4; push sunucusu gerekmez. |
 | 36 | Paylaşım görseli | 1080×1920 hikâye kartı (react-native-view-shot + expo-sharing); cevabı göstermez | Plan A6. |
+
+## Arkadaş ligi (2026-11-02)
+
+Plan yalnızca "özel grup kodu ve haftalık sıralama (aile, iş yeri) — MVP" diyordu; ayrıntılar burada.
+
+| # | Konu | Karar | Gerekçe |
+|---|---|---|---|
+| 37 | Hafta | Pazartesi 00:00 – Pazar 23:59, İstanbul günü; her Pazartesi sıfırdan başlar. Geçmiş haftalar (lig kurulduğu haftaya kadar) görülebilir | Türkiye'de hafta Pazartesi başlar; geçen haftanın birincisi konuşulabilsin. |
+| 38 | Haftalık puan | Üyenin o hafta **kendi gününde** oynadığı soruların puan toplamı. Arşiv oyunları ve **iptal edilen** sorular sayılmaz; anket puanı kesinleşene kadar 0 (⏳ ile gösterilir) | Herkes aynı soruyu aynı gün çözer; iptalde oynayana 100 verilir (#9) ama henüz oynamamış olan geride kalmasın. |
+| 39 | Sonradan katılan | Lige hafta ortasında katılan, o haftanın önceki günlerindeki puanını da getirir | Puanlar oyuna bağlı, lige değil; kimse geç katıldığı için cezalandırılmaz. |
+| 40 | Sıralama | Toplam puana göre; eşit puan aynı sırayı alır, sonraki sıra atlanır (1, 1, 3). Listede eşitlikte çok oynayan, sonra ad (Türkçe alfabe) önce | Bilinen spor tablosu mantığı. |
+| 41 | Lig kodu | 6 karakter, `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (0/O, 1/I yok). Boşluk, tire ve küçük harf kabul edilir; "K7P 2QX" diye gösterilir | Sesli okunurken ve elle yazılırken karışmasın; 32⁶ ≈ 1 milyar olasılık tahmini önler. |
+| 42 | Görünen ad zorunlu | Lig kurmak ya da katılmak için görünen ad gerekir (`display_name_required`); uygulama formda ad ister | Sıralamada kimin kim olduğu görünmeli; üyelik yine yok. |
+| 43 | Sınırlar | Ligde en fazla 50 kişi, oyuncu başına en fazla 10 lig | Aile/iş yeri ölçeği; sorgu maliyeti sınırlı. |
+| 44 | Sahiplik | Kuran sahip olur; üyeleri yalnızca sahip çıkarır. Sahip ayrılınca en eski üye sahip olur; son üye ayrılınca lig silinir | Ad değiştirme gibi yönetim ihtiyacı yok; "terk edilmiş lig" kalmaz. |
+| 45 | Gizlilik | Üye olmayan, lig kimliğini bilse bile içeriği göremez (404) | Kod paylaşılmadıkça lig özeldir. |
+| 46 | Davet bağlantısı | Paylaşım metni: ad + kod + `gununsorusu.app/lig/KOD`. Uygulama içi adres: `gununsorusu://leagues/join?code=KOD` | Alan adı yayında değil; bağlantı yayın aşamasında universal link olacak, o zamana kadar kod elle girilir. |
+
+Uç noktalar: `GET /leagues`, `POST /leagues`, `POST /leagues/join`, `GET /leagues/{id}?week=YYYY-MM-DD`, `DELETE /leagues/{id}/members/{playerId}` (kendini çıkarmak = ayrılmak, 204).
+
+### Yayın aşamasında lig için yapılacaklar
+- `gununsorusu.app/lig/{kod}` için universal link / App Links (apple-app-site-association, assetlinks.json) ve web karşılama sayfası.
+- Üye ve lig sayısı sınırı aynı anda gelen isteklerde birkaç kişi aşılabilir (sayım + ekleme); gerekirse serializable işlem ya da advisory lock.
+
+## İlk açılış ve "dün" şeridi (2026-11-02)
+
+| # | Konu | Karar | Gerekçe |
+|---|---|---|---|
+| 47 | İlk açılış | Ayrı tanıtım ekranı yok. Bir formatla ilk karşılaşmada sorunun altında 1–2 cümlelik, kapatılabilir ipucu kartı; hiç oynamamış oyuncuya ayrıca "Hoş geldin" cümlesi. Format bir kez oynanınca (ya da "Anladım" denince) bir daha çıkmaz; bilgi cihazda saklanır (`seenFormats`) | Plan A4/A5: soruya en fazla 1 dokunuş. Formatlar haftanın günlerine dağıldığı için ipucu ilk karşılaşmada gerekir, ilk açılışta değil. Bilgi formatının kuralları zaten "Başla" kartında yazıyor. |
+| 48 | "Dün" şeridi | Bugünün sorusu bitmeden, başlığın altında: dünkü puan ve Türkiye ortalaması, ya da kaçırılan/yarım kalan gün için arşiv çağrısı. Hiç oynamamış oyuncuya ve iptal edilen günde gösterilmez. Yeni uç nokta yok (`/plays/archive` + `/q/{dün}/crowd`) | Ertesi gün geri dönme sebebi (özellikle gece yarısı kesinleşen anket puanı); arşivi de canlandırır. |
+
+## Simge ve açılış ekranı (2026-11-02)
+
+| # | Konu | Karar | Gerekçe |
+|---|---|---|---|
+| 49 | Logo | Turuncu degrade zeminde beyaz, kalın "?"; noktası sarı bir güneş ("**gün**ün sorusu"). Tek vektör kaynaktan üretilir: `apps/mobile/scripts/render-brand.mjs` → `assets/images/*.png` ve `assets/brand/*.svg`. Uygulama içinde aynı geometri `BrandMark` bileşeninde (başlık filigranı, paylaşım kartı rozeti) | Profesyonel logo yokken tutarlı, küçük boyutta okunur bir işaret. Değiştirmek için tek dosya düzenlenip betik yeniden çalıştırılır. |
+| 50 | Platform dosyaları | iOS: 1024 PNG (Icon Composer `.icon` paketi yerine; bu makinede Xcode yok, doğrulanamaz). Android: uyarlanabilir simge (ön plan güvenli dairede, degrade arka plan, tek renkli katman). Açılış: saydam zeminde yuvarlak rozet, `imageWidth` 200; zemin renkleri uygulama temasıyla aynı (`#FBF7F1` / `#111216`) | Expo belgesinin önerileri; açılıştan uygulamaya geçişte renk sıçraması olmasın. |

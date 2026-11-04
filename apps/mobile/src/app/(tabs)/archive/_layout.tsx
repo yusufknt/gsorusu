@@ -3,6 +3,9 @@ import { Stack } from 'expo-router';
 import { fonts } from '@/theme/tokens';
 import { useColors } from '@/theme/useTheme';
 
+// Bugün ekranındaki "dün" şeridinden doğrudan bir güne gelinince altta arşiv listesi olsun.
+export const unstable_settings = { anchor: 'index' };
+
 export default function ArchiveLayout() {
   const c = useColors();
   return (

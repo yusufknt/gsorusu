@@ -6,16 +6,19 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { keys, usePlay, usePlayAction, useQuestion, useStats, type PlayAction } from '@/api/hooks';
 import { Card, ErrorView, Icon, LoadingScreen, Row, Screen, T } from '@/components/ui';
+import { useSettings } from '@/settings/settings';
 import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/useTheme';
 
 import { ComparePlay } from './ComparePlay';
 import { Confetti } from './Confetti';
+import { FormatTip, shouldShowTip } from './FormatTip';
 import { GameHero } from './GameHero';
 import { NumericPlay } from './NumericPlay';
 import { PollPlay } from './PollPlay';
 import { ResultPanel } from './ResultPanel';
 import { TriviaPlay } from './TriviaPlay';
+import { YesterdayStrip } from './YesterdayStrip';
 
 /**
  * Bir günün sorusu. `day` verilmezse bugünün sorusu (Bugün sekmesi); verilirse arşiv.
@@ -34,6 +37,16 @@ export function GameScreen({ day, topInset = true }: { day?: string; topInset?: 
   const resultY = useRef(0);
   const steps = (play.data?.numeric?.attemptsUsed ?? 0) + (play.data?.compare?.answered.length ?? 0);
   const finished = !!play.data?.finished;
+  const { settings, update: updateSettings } = useSettings();
+
+  // Formatı bir kez oynayan (bu cihazda ya da önceden) ipucunu bir daha görmez.
+  const format = q?.format;
+  const playedFormatBefore = !!stats.data?.byFormat.some((f) => f.format === format && f.played > 0);
+  useEffect(() => {
+    if (format && (finished || playedFormatBefore) && !settings.seenFormats.includes(format)) {
+      updateSettings({ seenFormats: [...settings.seenFormats, format] });
+    }
+  }, [format, finished, playedFormatBefore, settings.seenFormats, updateSettings]);
 
   // Her tahminden sonra giriş alanı görünür kalsın; oyun bitince sonuca in.
   const lastSteps = useRef<number | null>(null);
@@ -77,7 +90,10 @@ export function GameScreen({ day, topInset = true }: { day?: string; topInset?: 
   return (
     <View style={{ flex: 1 }}>
       <Screen scrollRef={scroll} topInset={topInset} refreshControl={<RefreshControl refreshing={question.isRefetching} onRefresh={refresh} tintColor={c.accent} colors={[c.accent]} />}>
-        <GameHero question={q} streak={streak} archive={state?.archive ?? false} />
+        {/* Arşiv sekmesinden açılan geçmiş gün, kendi gününde oynanmış olsa da "arşiv" görünümündedir. */}
+        <GameHero question={q} streak={streak} archive={!!day || (state?.archive ?? false)} />
+        {/* Hiç oynamamış yeni oyuncuya "dün kaçırdın" anlamsız; şerit yalnızca geri dönenlere. */}
+        {!day && !q.cancelled && !state?.finished && (stats.data?.played ?? 0) > 0 && <YesterdayStrip today={q.day} />}
 
         {q.cancelled ? (
           <Card style={{ gap: space.sm }}>
@@ -97,6 +113,7 @@ export function GameScreen({ day, topInset = true }: { day?: string; topInset?: 
                 <T variant="headline">{q.prompt}</T>
               </Animated.View>
             )}
+            {shouldShowTip(q.format, settings.seenFormats, !!state?.finished) && <FormatTip format={q.format} />}
             {state?.archive && !state.finished && (
               <Row style={{ gap: space.xs }}>
                 <Icon name="information-circle-outline" size={16} color={c.textMuted} />
@@ -118,7 +135,7 @@ export function GameScreen({ day, topInset = true }: { day?: string; topInset?: 
 
             {state?.finished && (
               <View onLayout={(e) => (resultY.current = e.nativeEvent.layout.y)}>
-                <ResultPanel question={q} play={state} streak={streak} onNextDay={goToNextDay} />
+                <ResultPanel question={q} play={state} streak={streak} isToday={!day} onNextDay={goToNextDay} />
               </View>
             )}
           </>

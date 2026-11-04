@@ -24,19 +24,23 @@ Notifications.setNotificationHandler({
   }),
 });
 
-/** İzin ister; verilmezse false döner. */
+/** İzin ister; verilmezse ya da bildirim sistemi hata verirse false döner (düğmeler hiç sessizce çökmesin). */
 export async function ensureNotificationPermission(): Promise<boolean> {
   if (Platform.OS === 'web') return false;
-  if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync(CHANNEL, {
-      name: 'Günlük hatırlatma',
-      importance: AndroidImportance.DEFAULT,
-    });
+  try {
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync(CHANNEL, {
+        name: 'Günlük hatırlatma',
+        importance: AndroidImportance.DEFAULT,
+      });
+    }
+    const current = await Notifications.getPermissionsAsync();
+    if (current.granted) return true;
+    const asked = await Notifications.requestPermissionsAsync();
+    return asked.granted;
+  } catch {
+    return false;
   }
-  const current = await Notifications.getPermissionsAsync();
-  if (current.granted) return true;
-  const asked = await Notifications.requestPermissionsAsync();
-  return asked.granted;
 }
 
 async function sync(enabled: boolean, hour: number, streak: number, playedToday: boolean) {

@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { addDays, formatCountdown, formatDay, formatTrNumber, nextResetMs, parseTrNumber, pct, pctOf, possessiveSuffix, trUpper } from './format';
+import { addDays, formatCountdown, formatDay, formatWeekRange, formatTrNumber, nextResetMs, parseTrNumber, pct, pctOf, possessiveSuffix, trUpper } from './format';
 
 test('Türkçe sayı girişi', () => {
   assert.equal(parseTrNumber('45'), 45);
@@ -66,4 +66,9 @@ test('geri sayım', () => {
 test('Türkçe büyük harf', () => {
   assert.equal(trUpper('senin cevabın'), 'SENİN CEVABIN');
   assert.equal(trUpper('ığdır iğne'), 'IĞDIR İĞNE');
+});
+
+test('lig haftası aralığı', () => {
+  assert.equal(formatWeekRange('2026-12-07', '2026-12-13'), '7–13 Aralık');
+  assert.equal(formatWeekRange('2026-12-28', '2027-01-03'), '28 Aralık – 3 Ocak');
 });

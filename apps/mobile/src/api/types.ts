@@ -160,3 +160,68 @@ export interface Me {
   notifyHour: number;
   createdAt: string;
 }
+
+// --- Arkadaş ligi (services/gunun-api/src/GununSorusu.Api/Leagues/LeagueEndpoints.cs) ---
+
+export interface LeagueSummary {
+  id: string;
+  code: string;
+  name: string;
+  isOwner: boolean;
+  memberCount: number;
+  /** Bu haftaki sıran; eşit puanda aynı sıra. */
+  myRank: number;
+  myTotal: number;
+  /** Üyelerden bugünün sorusunu bitirenler. */
+  playedToday: number;
+  /** Haftanın lideri; henüz kimse puan almadıysa null. */
+  leaderName: string | null;
+}
+
+export interface LeagueDay {
+  day: string;
+  /** O günün soru numarası; soru yoksa ya da gün gelmediyse null. */
+  no: number | null;
+  format: QuestionFormat | null;
+  /** İptal edilen soru haftalık toplama girmez. */
+  cancelled: boolean;
+  future: boolean;
+}
+
+export interface LeagueWeek {
+  start: string;
+  end: string;
+  isCurrent: boolean;
+  previous: string | null;
+  next: string | null;
+  days: LeagueDay[];
+}
+
+/** played && score === null: anket puanı gün bitince kesinleşir. */
+export interface LeagueCell {
+  played: boolean;
+  score: number | null;
+}
+
+export interface LeagueStanding {
+  playerId: string;
+  displayName: string;
+  isMe: boolean;
+  isOwner: boolean;
+  rank: number;
+  total: number;
+  played: number;
+  /** Pazartesi → Pazar. */
+  days: LeagueCell[];
+}
+
+export interface League {
+  id: string;
+  code: string;
+  name: string;
+  isOwner: boolean;
+  memberCount: number;
+  maxMembers: number;
+  week: LeagueWeek;
+  standings: LeagueStanding[];
+}

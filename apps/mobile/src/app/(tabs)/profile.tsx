@@ -25,7 +25,7 @@ import {
 import { trUpper } from '@/lib/format';
 import { useHaptics } from '@/lib/haptics';
 import { ensureNotificationPermission } from '@/lib/reminders';
-import { mockReset, mockShiftDays } from '@/mock/server';
+import { mockAddLeagueBots, mockReset, mockShiftDays } from '@/mock/server';
 import { useSettings, type ThemePref } from '@/settings/settings';
 import { font, fonts, minTouch, radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/useTheme';
@@ -217,6 +217,16 @@ function DevTools() {
             />
           </View>
         </Row>
+        <Button
+          title="Liglerime test oyuncusu ekle"
+          icon="people-outline"
+          kind="secondary"
+          onPress={async () => {
+            const added = await mockAddLeagueBots();
+            await refresh();
+            toast(added > 0 ? `${added} test oyuncusu eklendi` : 'Önce Lig sekmesinden bir lig kur');
+          }}
+        />
       </Card>
     </>
   );

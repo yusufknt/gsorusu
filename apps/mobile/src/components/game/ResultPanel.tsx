@@ -1,12 +1,13 @@
 import * as Clipboard from 'expo-clipboard';
+import { router } from 'expo-router';
 import { useRef, useState } from 'react';
 import { Share, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import type { ViewShotRef } from 'react-native-view-shot';
 
-import { useCrowd } from '@/api/hooks';
+import { useCrowd, useLeagues } from '@/api/hooks';
 import type { Crowd, PlayState, PublicQuestion } from '@/api/types';
-import { Bar, Button, Card, Chip, Icon, Row, T, useToast } from '@/components/ui';
+import { Bar, Button, Card, Chip, Icon, PressableScale, Row, T, useToast } from '@/components/ui';
 import { formatAmount, formatCountdown, formatMonthYear, formatTrNumber, nextResetMs, pct, pctOf } from '@/lib/format';
 import { useHaptics } from '@/lib/haptics';
 import { ensureNotificationPermission } from '@/lib/reminders';
@@ -24,11 +25,14 @@ export function ResultPanel({
   question,
   play,
   streak,
+  isToday,
   onNextDay,
 }: {
   question: PublicQuestion;
   play: PlayState;
   streak: number;
+  /** false: Arşiv sekmesinden açılan geçmiş gün (kendi gününde oynanmış olsa bile). */
+  isToday: boolean;
   onNextDay?: () => void;
 }) {
   const c = useColors();
@@ -103,10 +107,48 @@ export function ResultPanel({
 
       <Reveal question={question} play={play} />
       {crowd.data && crowd.data.plays > 0 && <CrowdCard question={question} play={play} crowd={crowd.data} />}
-      {!play.archive && <NextQuestion day={question.day} onReached={onNextDay} />}
+      {isToday && <LeagueNudge />}
+      {isToday && <NextQuestion day={question.day} onReached={onNextDay} />}
 
       <ShareCard ref={cardRef} play={play} streak={streak} colors={c} />
     </View>
+  );
+}
+
+/** Ligdeki yerin (en iyi sıradaki lig); lig yoksa lig kurmaya davet. */
+function LeagueNudge() {
+  const c = useColors();
+  const leagues = useLeagues();
+  if (!leagues.data) return null;
+  const best = [...leagues.data].sort((a, b) => a.myRank - b.myRank || b.memberCount - a.memberCount)[0];
+  const title = best ? `${best.name}: ${best.myRank}. sıradasın` : 'Arkadaşlarınla yarış';
+  const sub = best
+    ? best.memberCount > 1
+      ? `Bu hafta ${best.myTotal} puan · ${best.memberCount} kişi`
+      : 'Ligde henüz yalnızsın; kodu paylaş'
+    : 'Bir lig kur, haftalık sıralamada karşılaşın';
+  return (
+    <PressableScale
+      haptic="select"
+      accessibilityRole="button"
+      accessibilityLabel={`${title}. ${sub}`}
+      // Başka sekmenin yığınına geçiş: withAnchor ile altta lig listesi de kurulur (geri tuşu oraya döner).
+      onPress={() => router.navigate(best ? `/leagues/${best.id}` : '/leagues', { withAnchor: true })}>
+      <Card style={{ flexDirection: 'row', alignItems: 'center', gap: space.md }}>
+        <Text style={{ fontSize: 28 }} accessible={false}>
+          🏆
+        </Text>
+        <View style={{ flex: 1 }}>
+          <T variant="bodyStrong" numberOfLines={1}>
+            {title}
+          </T>
+          <T variant="caption" color="textMuted">
+            {sub}
+          </T>
+        </View>
+        <Icon name="chevron-forward" size={18} color={c.textSubtle} />
+      </Card>
+    </PressableScale>
   );
 }
 

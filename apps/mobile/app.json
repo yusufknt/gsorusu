@@ -8,13 +8,13 @@
     "scheme": "gununsorusu",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon",
+      "icon": "./assets/images/icon.png",
       "bundleIdentifier": "app.gununsorusu",
       "supportsTablet": false
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#FAF7F2",
+        "backgroundColor": "#F5632F",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -31,11 +31,12 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#FAF7F2",
+          "backgroundColor": "#FBF7F1",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76,
+          "imageWidth": 200,
           "dark": {
-            "backgroundColor": "#121317"
+            "backgroundColor": "#111216",
+            "image": "./assets/images/splash-icon.png"
           }
         }
       ],

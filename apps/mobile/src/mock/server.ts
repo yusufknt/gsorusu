@@ -16,6 +16,7 @@ import type {
   QuestionFormat,
   Stats,
 } from '../api/types';
+import { addBotsToOwnedLeagues, LeagueError, leagueRoute, NOT_HANDLED, type LeagueContext, type MockLeague } from './leagues';
 import { BANK, formatForWeekday, SOURCE_TEXT, type MockQuestion } from './questions';
 import * as R from './rules';
 
@@ -62,6 +63,7 @@ interface MockState {
   plays: Record<string, MockPlay>;
   streak: R.StreakState;
   me: Me;
+  leagues: MockLeague[];
   /** Geliştirici aracı: saati gün gün ileri almak için. */
   dayOffset: number;
 }
@@ -70,6 +72,7 @@ const freshState = (): MockState => ({
   plays: {},
   streak: R.EMPTY_STREAK,
   me: { playerId: 'test-oyuncu', displayName: null, city: null, notifyHour: 9, createdAt: new Date().toISOString() },
+  leagues: [],
   dayOffset: 0,
 });
 
@@ -329,13 +332,25 @@ export async function mockApi<T>(method: string, path: string, body?: unknown): 
   const b = body as Body;
   // Ağ gecikmesi hissi; yükleniyor durumları da görünsün.
   await new Promise((r) => setTimeout(r, 120));
-  const result = route(s, method, path, b);
+  const [pathname, search = ''] = path.split('?');
+  let result: unknown;
+  try {
+    result = route(s, method, pathname, new URLSearchParams(search), b);
+  } catch (e) {
+    if (e instanceof LeagueError) throw new MockError(e.status, e.code, e.message);
+    throw e;
+  }
   await save();
   return result as T;
 }
 
-function route(s: MockState, method: string, path: string, b: Body): unknown {
+function route(s: MockState, method: string, path: string, query: URLSearchParams, b: Body): unknown {
   let m: RegExpMatchArray | null;
+
+  if (path.startsWith('/leagues')) {
+    const result = leagueRoute(leagueContext(s), method, path, query, b);
+    if (result !== NOT_HANDLED) return result;
+  }
 
   if (method === 'POST' && path === '/auth/device') return { token: 'mock', playerId: s.me.playerId, isNew: false };
   if (path === '/me') {
@@ -474,6 +489,25 @@ function playAction(s: MockState, q: ResolvedQuestion, action: string | undefine
   throw new MockError(404, 'not_found', 'Aradığın şey bulunamadı.');
 }
 
+function leagueContext(s: MockState): LeagueContext {
+  return {
+    leagues: s.leagues,
+    me: { id: s.me.playerId, name: s.me.displayName },
+    today: today(),
+    now: mockNow(),
+    launchDay: LAUNCH_DAY,
+    formatOf: (day) => questionFor(day).format,
+    myCell: (day) => {
+      const p = s.plays[day];
+      if (!p || p.archive || day > today() || day < LAUNCH_DAY) return { played: false, score: null };
+      const q = questionFor(day);
+      settleTrivia(q, p);
+      settlePoll(q, p);
+      return p.finishedAt ? { played: true, score: p.score } : { played: false, score: null };
+    },
+  };
+}
+
 function archive(s: MockState): ArchiveItem[] {
   const t = today();
   const items: ArchiveItem[] = [];
@@ -554,6 +588,14 @@ export async function mockShiftDays(n: number) {
 export async function mockReset() {
   state = freshState();
   await save();
+}
+
+/** Kendi kurduğun liglere test oyuncusu ekler. Eklenen oyuncu sayısı. */
+export async function mockAddLeagueBots(): Promise<number> {
+  const s = await load();
+  const added = addBotsToOwnedLeagues(s.leagues, s.me.playerId, mockNow());
+  await save();
+  return added;
 }
 
 export async function mockDayOffset(): Promise<number> {

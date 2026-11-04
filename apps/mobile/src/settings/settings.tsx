@@ -1,15 +1,19 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
+import type { QuestionFormat } from '@/api/types';
+
 export type ThemePref = 'system' | 'light' | 'dark';
 
 export interface Settings {
   theme: ThemePref;
   haptics: boolean;
   reminders: boolean;
+  /** İpucu kartı gösterilmiş (ya da oynanmış) formatlar; ilk karşılaşma ipucu bir daha çıkmaz. */
+  seenFormats: QuestionFormat[];
 }
 
-const DEFAULTS: Settings = { theme: 'system', haptics: true, reminders: false };
+const DEFAULTS: Settings = { theme: 'system', haptics: true, reminders: false, seenFormats: [] };
 const KEY = 'gunun.settings.v1';
 
 interface Ctx {
@@ -20,7 +24,7 @@ interface Ctx {
 
 const SettingsContext = createContext<Ctx>({ settings: DEFAULTS, ready: false, update: () => {} });
 
-/** Cihaz tercihleri (tema, titreşim, hatırlatma). Yalnızca bu cihazda saklanır. */
+/** Cihaz tercihleri (tema, titreşim, hatırlatma, görülen ipuçları). Yalnızca bu cihazda saklanır. */
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<Settings>(DEFAULTS);
   const [ready, setReady] = useState(false);

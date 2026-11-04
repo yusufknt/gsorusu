@@ -7,6 +7,7 @@ using GununSorusu.Api.Data;
 using GununSorusu.Api.Game;
 using GununSorusu.Api.Infrastructure;
 using GununSorusu.Api.Jobs;
+using GununSorusu.Api.Leagues;
 using GununSorusu.Domain;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http.Json;
@@ -111,6 +112,7 @@ app.MapGet("/health", async (GunDbContext db, CancellationToken ct) =>
 
 app.MapAuthEndpoints();
 app.MapGameEndpoints();
+app.MapLeagueEndpoints();
 app.MapAdminEndpoints();
 
 app.Run();

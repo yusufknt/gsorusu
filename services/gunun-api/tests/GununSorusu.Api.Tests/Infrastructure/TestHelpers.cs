@@ -30,6 +30,11 @@ public static class Http
     public static async Task<ApiResponse> PutJsonAsync(this HttpClient c, string url, object body) =>
         await ReadAsync(await c.PutAsJsonAsync(url, body, ApiFactory.Json));
 
+    public static async Task<ApiResponse> PatchJsonAsync(this HttpClient c, string url, object body) =>
+        await ReadAsync(await c.PatchAsJsonAsync(url, body, ApiFactory.Json));
+
+    public static async Task<ApiResponse> DeleteJsonAsync(this HttpClient c, string url) => await ReadAsync(await c.DeleteAsync(url));
+
     private static async Task<ApiResponse> ReadAsync(HttpResponseMessage res)
     {
         var text = await res.Content.ReadAsStringAsync();

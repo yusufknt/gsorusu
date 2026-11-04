@@ -38,6 +38,15 @@ export function formatMonthYear(day: string): string {
   return `${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 }
 
+/** Lig haftası: "7–13 Aralık", ay değişirse "28 Aralık – 3 Ocak". */
+export function formatWeekRange(start: string, end: string): string {
+  const a = parseDay(start);
+  const b = parseDay(end);
+  return a.getUTCMonth() === b.getUTCMonth()
+    ? `${a.getUTCDate()}–${b.getUTCDate()} ${MONTHS[b.getUTCMonth()]}`
+    : `${a.getUTCDate()} ${MONTHS[a.getUTCMonth()]} – ${b.getUTCDate()} ${MONTHS[b.getUTCMonth()]}`;
+}
+
 /** Verilen andaki İstanbul günü ("2026-12-10"). */
 export function istanbulDay(ms: number): string {
   return new Date(ms + 3 * 3_600_000).toISOString().slice(0, 10);

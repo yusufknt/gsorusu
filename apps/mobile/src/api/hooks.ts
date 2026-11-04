@@ -1,7 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api } from './client';
-import type { ArchiveItem, Crowd, Me, PlayState, PublicQuestion, Stats } from './types';
+import type { ArchiveItem, Crowd, League, LeagueSummary, Me, PlayState, PublicQuestion, Stats } from './types';
 
 export const keys = {
   question: (day: string) => ['question', day] as const,
@@ -10,6 +10,8 @@ export const keys = {
   stats: ['stats'] as const,
   archive: ['archive'] as const,
   me: ['me'] as const,
+  leagues: ['leagues'] as const,
+  league: (id: string, week: string | null) => ['leagues', id, week ?? 'current'] as const,
 };
 
 /** day verilmezse bugünün sorusu. */
@@ -53,7 +55,11 @@ export function useUpdateMe() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: Partial<Pick<Me, 'displayName' | 'city' | 'notifyHour'>>) => api<Me>('PATCH', '/me', body),
-    onSuccess: (me) => qc.setQueryData(keys.me, me),
+    onSuccess: (me) => {
+      qc.setQueryData(keys.me, me);
+      // Görünen ad liglerdeki sıralamada da görünür.
+      void qc.invalidateQueries({ queryKey: keys.leagues });
+    },
   });
 }
 
@@ -92,6 +98,7 @@ export function usePlayAction(day: string) {
         void qc.invalidateQueries({ queryKey: keys.stats });
         void qc.invalidateQueries({ queryKey: keys.archive });
         void qc.invalidateQueries({ queryKey: keys.crowd(day) });
+        void qc.invalidateQueries({ queryKey: keys.leagues });
       }
     },
     // Çakışmada (ör. iki cihazdan aynı anda) en güncel durumu sunucudan al.
@@ -104,5 +111,57 @@ export function useStreakRepair() {
   return useMutation({
     mutationFn: () => api<unknown>('POST', '/streak/repair'),
     onSuccess: () => void qc.invalidateQueries({ queryKey: keys.stats }),
+  });
+}
+
+// --- Arkadaş ligi ---
+
+export function useLeagues() {
+  return useQuery({ queryKey: keys.leagues, queryFn: () => api<LeagueSummary[]>('GET', '/leagues') });
+}
+
+/** week: haftanın Pazartesisi; null = bu hafta. */
+export function useLeague(id: string | undefined, week: string | null) {
+  return useQuery({
+    queryKey: keys.league(id ?? '', week),
+    queryFn: () => api<League>('GET', week ? `/leagues/${id}?week=${week}` : `/leagues/${id}`),
+    enabled: !!id,
+    // Hafta değiştirirken eski tablo yerinde kalsın, ekran boşalıp dolmasın.
+    placeholderData: keepPreviousData,
+  });
+}
+
+function useLeagueMutation<V>(fn: (v: V) => Promise<League>) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: (league) => {
+      qc.setQueryData(keys.league(league.id, null), league);
+      void qc.invalidateQueries({ queryKey: keys.leagues, refetchType: 'active' });
+    },
+  });
+}
+
+export function useCreateLeague() {
+  return useLeagueMutation((name: string) => api<League>('POST', '/leagues', { name }));
+}
+
+export function useJoinLeague() {
+  return useLeagueMutation((code: string) => api<League>('POST', '/leagues/join', { code }));
+}
+
+/** Başka bir üyeyi çıkarır (yalnızca lig sahibi). */
+export function useRemoveMember(leagueId: string) {
+  return useLeagueMutation((playerId: string) => api<League>('DELETE', `/leagues/${leagueId}/members/${playerId}`));
+}
+
+export function useLeaveLeague(leagueId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (myId: string) => api<void>('DELETE', `/leagues/${leagueId}/members/${myId}`),
+    onSuccess: () => {
+      qc.removeQueries({ queryKey: ['leagues', leagueId] });
+      void qc.invalidateQueries({ queryKey: keys.leagues });
+    },
   });
 }

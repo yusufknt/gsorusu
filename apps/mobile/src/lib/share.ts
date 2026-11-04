@@ -60,3 +60,20 @@ export function shareText(play: PlayState, streak: number): string {
 function seconds(ms: number | null | undefined): string {
   return ms == null ? '' : `${formatTrNumber(ms / 1000, 1)} sn`;
 }
+
+/** Kodu "K7P 2QX" biçiminde gösterir (okuması ve sesli söylemesi kolay). */
+export function formatLeagueCode(code: string): string {
+  return `${code.slice(0, 3)} ${code.slice(3)}`;
+}
+
+/**
+ * Lig daveti. Bağlantı yayın aşamasında uygulamayı açacak (universal link); o zamana kadar kod
+ * elle de girilebilsin diye metinde ayrıca yazılır.
+ */
+export function leagueInviteText(name: string, code: string): string {
+  return [
+    `Günün Sorusu ? ligime katıl: ${name}`,
+    `Kod: ${formatLeagueCode(code)}`,
+    `${SHARE_HOST}/lig/${code}`,
+  ].join('\n');
+}

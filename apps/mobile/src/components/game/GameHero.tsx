@@ -4,6 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import type { PublicQuestion } from '@/api/types';
+import { BrandMark } from '@/components/BrandMark';
 import { Icon, PressableScale, Row } from '@/components/ui';
 import { FORMAT_LABEL, formatDay } from '@/lib/format';
 import { font, fonts, radius, shadow, space } from '@/theme/tokens';
@@ -18,9 +19,9 @@ export function GameHero({ question, streak, archive }: { question: PublicQuesti
   return (
     <Animated.View entering={FadeInDown.duration(400)} style={[styles.wrap, shadow(c.heroTo, 2)]}>
       <LinearGradient colors={[c.heroFrom, c.heroTo]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
-        <Text style={styles.bigMark} accessible={false}>
-          ?
-        </Text>
+        <View style={styles.bigMark} pointerEvents="none">
+          <BrandMark size={230} sun={false} opacity={0.13} />
+        </View>
         <Row style={{ justifyContent: 'space-between' }}>
           <Text style={styles.wordmark} accessibilityRole="header">
             Günün Sorusu <Text style={{ opacity: 0.75 }}>?</Text>
@@ -62,15 +63,7 @@ export function GameHero({ question, streak, archive }: { question: PublicQuesti
 const styles = StyleSheet.create({
   wrap: { borderRadius: radius.xl },
   hero: { borderRadius: radius.xl, padding: space.xl, gap: space.xs, overflow: 'hidden' },
-  bigMark: {
-    position: 'absolute',
-    right: -10,
-    top: -40,
-    fontFamily: fonts.black,
-    fontSize: 200,
-    color: '#FFFFFF',
-    opacity: 0.12,
-  },
+  bigMark: { position: 'absolute', right: -50, top: -30 },
   wordmark: { ...font.title, color: '#FFFFFF' },
   meta: { ...font.body, color: '#FFFFFF', opacity: 0.9 },
   help: {

@@ -23,6 +23,10 @@ export default function TabLayout() {
         <NativeTabs.Trigger.Label>İstatistik</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="chart.bar.fill" md="bar_chart" />
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="leagues">
+        <NativeTabs.Trigger.Label>Lig</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="trophy.fill" md="emoji_events" />
+      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="archive">
         <NativeTabs.Trigger.Label>Arşiv</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="clock.arrow.circlepath" md="history" />

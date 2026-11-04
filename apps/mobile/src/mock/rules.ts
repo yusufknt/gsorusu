@@ -136,6 +136,30 @@ export function repair(s: StreakState, today: string): StreakState {
   return { ...s, lastPlayedDay: fromDayNumber(dayNumber(today) - 1), lastRepairDay: today };
 }
 
+// --- Arkadaş ligi (GununSorusu.Domain/Leagues/League.cs) ---
+
+export { generateLeagueCode, LEAGUE, LEAGUE_CODE_ALPHABET, normalizeLeagueCode, weekStart } from '../lib/league';
+
+export interface StandingInput {
+  key: string;
+  name: string;
+  total: number;
+  played: number;
+}
+
+/**
+ * Toplam puana göre sıralar; eşit puan aynı sırayı alır, sonraki sıra atlanır (1, 1, 3).
+ * Eşitlikte listede önce daha çok gün oynayan, sonra ada göre (Türkçe alfabe) gelir.
+ */
+export function rankStandings<T extends StandingInput>(members: T[]): (T & { rank: number })[] {
+  const ordered = [...members].sort(
+    (a, b) => b.total - a.total || b.played - a.played || a.name.localeCompare(b.name, 'tr', { sensitivity: 'base' }),
+  );
+  const out: (T & { rank: number })[] = [];
+  ordered.forEach((m, i) => out.push({ ...m, rank: i > 0 && m.total === ordered[i - 1].total ? out[i - 1].rank : i + 1 }));
+  return out;
+}
+
 // --- Yardımcılar ---
 
 /** Küçük, deterministik rastgele sayı üreteci (aynı seed → aynı dizi). */

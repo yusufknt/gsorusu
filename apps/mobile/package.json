@@ -56,7 +56,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "test": "tsx --test src/lib/*.test.ts src/mock/*.test.ts",
+    "test": "tsx --test src/lib/*.test.ts src/mock/*.test.ts src/ads/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "private": true

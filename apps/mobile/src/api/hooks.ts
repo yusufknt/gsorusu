@@ -67,6 +67,12 @@ export type PlayAction =
   | { kind: 'start' }
   | { kind: 'guess'; value: number }
   | { kind: 'hint' }
+  /** Ödüllü reklamdan sonra: 7. tahmin hakkı. */
+  | { kind: 'extra' }
+  /** Ek tahmin istemeyen oyuncu cevabı görür. */
+  | { kind: 'reveal' }
+  /** Ödüllü reklamdan sonra: kilitli arşiv gününü açar. */
+  | { kind: 'unlock' }
   | { kind: 'answer'; option: number }
   | { kind: 'compare'; round: number; choice: number }
   | { kind: 'poll'; option: number; predictedPct: number };
@@ -84,6 +90,12 @@ export function usePlayAction(day: string) {
           return api<PlayState>('POST', `${path}/guess`, { value: a.value });
         case 'hint':
           return api<PlayState>('POST', `${path}/hint`);
+        case 'extra':
+          return api<PlayState>('POST', `${path}/extra`);
+        case 'reveal':
+          return api<PlayState>('POST', `${path}/reveal`);
+        case 'unlock':
+          return api<PlayState>('POST', `${path}/unlock`);
         case 'answer':
           return api<PlayState>('POST', `${path}/answer`, { option: a.option });
         case 'compare':
@@ -94,6 +106,8 @@ export function usePlayAction(day: string) {
     },
     onSuccess: (state) => {
       qc.setQueryData(keys.play(day), state);
+      // Arşivde ilk işlem günün ücretsiz hakkını kullanır; listedeki kilitler değişir.
+      if (state.archive) void qc.invalidateQueries({ queryKey: keys.archive });
       if (state.finished) {
         void qc.invalidateQueries({ queryKey: keys.stats });
         void qc.invalidateQueries({ queryKey: keys.archive });

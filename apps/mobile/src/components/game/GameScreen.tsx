@@ -4,8 +4,10 @@ import { useCallback, useEffect, useRef, useState, type ComponentRef } from 'rea
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
+import { useAds } from '@/ads/AdsProvider';
 import { keys, usePlay, usePlayAction, useQuestion, useStats, type PlayAction } from '@/api/hooks';
-import { Card, ErrorView, Icon, LoadingScreen, Row, Screen, T } from '@/components/ui';
+import { StreakRepairCard } from '@/components/StreakRepairCard';
+import { Button, Card, ErrorView, Icon, InlineError, LoadingScreen, Row, Screen, T } from '@/components/ui';
 import { useSettings } from '@/settings/settings';
 import { radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/useTheme';
@@ -67,6 +69,8 @@ export function GameScreen({ day, topInset = true }: { day?: string; topInset?: 
     }
   }, [steps, finished]);
 
+  useInterstitialAfterArchive(day, play.data?.finished);
+
   const act = useCallback((a: PlayAction) => action.mutate(a), [action]);
   const refetchPlay = useCallback(() => void play.refetch(), [play]);
   const refresh = useCallback(() => {
@@ -92,8 +96,10 @@ export function GameScreen({ day, topInset = true }: { day?: string; topInset?: 
       <Screen scrollRef={scroll} topInset={topInset} refreshControl={<RefreshControl refreshing={question.isRefetching} onRefresh={refresh} tintColor={c.accent} colors={[c.accent]} />}>
         {/* Arşiv sekmesinden açılan geçmiş gün, kendi gününde oynanmış olsa da "arşiv" görünümündedir. */}
         <GameHero question={q} streak={streak} archive={!!day || (state?.archive ?? false)} />
+        {/* Bir gün kaçırıldıysa önce seri kurtarma (ödüllü reklam); yoksa dün şeridi. */}
+        {!day && !q.cancelled && !state?.finished && stats.data?.canRepairStreak && <StreakRepairCard />}
         {/* Hiç oynamamış yeni oyuncuya "dün kaçırdın" anlamsız; şerit yalnızca geri dönenlere. */}
-        {!day && !q.cancelled && !state?.finished && (stats.data?.played ?? 0) > 0 && <YesterdayStrip today={q.day} />}
+        {!day && !q.cancelled && !state?.finished && !stats.data?.canRepairStreak && (stats.data?.played ?? 0) > 0 && <YesterdayStrip today={q.day} />}
 
         {q.cancelled ? (
           <Card style={{ gap: space.sm }}>
@@ -113,17 +119,21 @@ export function GameScreen({ day, topInset = true }: { day?: string; topInset?: 
                 <T variant="headline">{q.prompt}</T>
               </Animated.View>
             )}
-            {shouldShowTip(q.format, settings.seenFormats, !!state?.finished) && <FormatTip format={q.format} />}
-            {state?.archive && !state.finished && (
-              <Row style={{ gap: space.xs }}>
+            {state?.archiveAccess !== 'locked' && shouldShowTip(q.format, settings.seenFormats, !!state?.finished) && <FormatTip format={q.format} />}
+            {state?.archive && !state.finished && state.archiveAccess !== 'locked' && (
+              <Row style={{ gap: space.xs, alignItems: 'flex-start' }}>
                 <Icon name="information-circle-outline" size={16} color={c.textMuted} />
-                <T variant="caption" color="textMuted">
-                  Arşiv oyunu: serini ve istatistiklerini etkilemez.
+                <T variant="caption" color="textMuted" style={{ flex: 1 }}>
+                  {state.archiveAccess === 'free'
+                    ? 'Arşiv oyunu: serini etkilemez. Bu soruyla bugünkü ücretsiz arşiv hakkını kullanacaksın.'
+                    : 'Arşiv oyunu: serini ve istatistiklerini etkilemez.'}
                 </T>
               </Row>
             )}
 
-            {q.format === 'price' || q.format === 'number' ? (
+            {state?.archiveAccess === 'locked' ? (
+              <ArchiveLockCard busy={action.isPending} error={action.error} onUnlocked={() => act({ kind: 'unlock' })} />
+            ) : q.format === 'price' || q.format === 'number' ? (
               <NumericPlay {...props} />
             ) : q.format === 'trivia' ? (
               <TriviaPlay {...props} onTimeUp={refetchPlay} />
@@ -143,6 +153,66 @@ export function GameScreen({ day, topInset = true }: { day?: string; topInset?: 
       </Screen>
       {confetti && <Confetti />}
     </View>
+  );
+}
+
+/** Ücretsiz arşiv hakkı bitti: soru ödüllü reklamla açılır. */
+function ArchiveLockCard({ busy, error, onUnlocked }: { busy: boolean; error: unknown; onUnlocked: () => void }) {
+  const c = useColors();
+  const ads = useAds();
+  const [watching, setWatching] = useState(false);
+  const watch = async () => {
+    setWatching(true);
+    try {
+      if (await ads.showRewarded('archive_unlock')) onUnlocked();
+    } finally {
+      setWatching(false);
+    }
+  };
+  return (
+    <Animated.View entering={FadeInDown.delay(120).duration(350)}>
+      <Card style={{ gap: space.md, alignItems: 'center', paddingVertical: space.xl }}>
+        <View style={[styles.lock, { backgroundColor: c.accentSoft }]}>
+          <Icon name="lock-closed" size={26} color={c.accent} />
+        </View>
+        <T variant="bodyStrong" center>
+          Bugünkü ücretsiz arşiv hakkını kullandın
+        </T>
+        <T color="textMuted" center>
+          Bu soruyu kısa bir video izleyerek açabilirsin. Yarın yeni bir ücretsiz hakkın olacak.
+        </T>
+        <View style={{ alignSelf: 'stretch' }}>
+          <Button title="Video izle · soruyu aç" icon="play-circle" size="lg" onPress={() => void watch()} loading={watching || busy} />
+        </View>
+        <InlineError error={error} />
+      </Card>
+    </Animated.View>
+  );
+}
+
+/**
+ * Arşivden bir soru bu ziyarette bitirildiyse, listeye dönerken geçiş reklamı adayıdır
+ * (sıklık sınırları AdsProvider'da). Eski, zaten bitmiş bir günü açıp kapatmak sayılmaz.
+ */
+function useInterstitialAfterArchive(day: string | undefined, finished: boolean | undefined) {
+  const { maybeShowInterstitial } = useAds();
+  // Oyun durumu yüklenince ilk görülen değer: zaten bitmişse bu ziyaret sayılmaz.
+  const initial = useRef<boolean | null>(null);
+  const finishedHere = useRef(false);
+  useEffect(() => {
+    if (!day || finished === undefined) return;
+    if (initial.current === null) initial.current = finished;
+    else if (finished && !initial.current) finishedHere.current = true;
+  }, [day, finished]);
+  const show = useRef(maybeShowInterstitial);
+  useEffect(() => {
+    show.current = maybeShowInterstitial;
+  }, [maybeShowInterstitial]);
+  useEffect(
+    () => () => {
+      if (finishedHere.current) void show.current('after_archive');
+    },
+    [],
   );
 }
 
@@ -168,4 +238,5 @@ function useConfettiOnSolve(finished: boolean | undefined, solved: boolean | und
 
 const styles = StyleSheet.create({
   media: { width: '100%', aspectRatio: 1, borderRadius: radius.lg },
+  lock: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
 });

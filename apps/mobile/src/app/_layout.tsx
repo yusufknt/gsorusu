@@ -14,6 +14,7 @@ import { useEffect, useState } from 'react';
 import { AppState } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
+import { AdsProvider } from '@/ads/AdsProvider';
 import { ApiError } from '@/api/client';
 import { ToastProvider } from '@/components/ui';
 import { SettingsProvider, useSettings } from '@/settings/settings';
@@ -81,16 +82,18 @@ function ThemedApp() {
         colors: { ...base.colors, background: c.background, card: c.background, text: c.text, primary: c.accent, border: c.border },
       }}>
       <ToastProvider>
-        <StatusBar style={dark ? 'light' : 'dark'} />
-        <Stack
-          screenOptions={{
-            headerShadowVisible: false,
-            headerTitleStyle: { fontFamily: fonts.black, color: c.text },
-            contentStyle: { backgroundColor: c.background },
-          }}>
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="how-to-play" options={{ presentation: 'modal', title: 'Nasıl oynanır?' }} />
-        </Stack>
+        <AdsProvider>
+          <StatusBar style={dark ? 'light' : 'dark'} />
+          <Stack
+            screenOptions={{
+              headerShadowVisible: false,
+              headerTitleStyle: { fontFamily: fonts.black, color: c.text },
+              contentStyle: { backgroundColor: c.background },
+            }}>
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="how-to-play" options={{ presentation: 'modal', title: 'Nasıl oynanır?' }} />
+          </Stack>
+        </AdsProvider>
       </ToastProvider>
     </ThemeProvider>
   );

@@ -9,6 +9,7 @@ import Animated, {
   ZoomIn,
 } from 'react-native-reanimated';
 
+import { useAds } from '@/ads/AdsProvider';
 import type { PlayAction } from '@/api/hooks';
 import type { Guess, PlayState, PublicQuestion } from '@/api/types';
 import { Button, Card, Icon, InlineError, PressableScale, Row, T } from '@/components/ui';
@@ -22,7 +23,10 @@ import { Keypad } from './Keypad';
 
 const NO_GUESSES: Guess[] = [];
 
-/** Fiyatı Ne? ve Sayı tahmini: 6 hak, her tahminde yön, %10 içinde "çok yakın". */
+/**
+ * Fiyatı Ne? ve Sayı tahmini: 6 hak, her tahminde yön, %10 içinde "çok yakın".
+ * Ödüllü reklamla: 3. tahminden sonra ipucu; 6 hak bitince cevap açılmadan önce 1 tahmin daha.
+ */
 export function NumericPlay({
   question,
   play,
@@ -43,6 +47,19 @@ export function NumericPlay({
   const n = play?.numeric;
   const guesses = n?.guesses ?? NO_GUESSES;
   const max = n?.maxAttempts ?? question.maxAttempts ?? 6;
+  const ads = useAds();
+  const [watching, setWatching] = useState(false);
+  const awaitingExtra = !!n?.canBuyExtraGuess && !play?.finished;
+
+  /** Ödüllü reklam sonuna kadar izlenirse işlem yapılır; yarıda kalırsa hiçbir şey değişmez. */
+  const withReward = async (placement: 'hint' | 'extra_guess', a: PlayAction) => {
+    setWatching(true);
+    try {
+      if (await ads.showRewarded(placement)) act(a);
+    } finally {
+      setWatching(false);
+    }
+  };
 
   // Yeni tahmin geldiğinde sonucu titreşimle hissettir (uygulama yeniden açılınca değil).
   const seen = useRef(guesses.length);
@@ -94,7 +111,19 @@ export function NumericPlay({
         </Animated.View>
       )}
 
-      {!play?.finished && (
+      {awaitingExtra && (
+        <ExtraGuessOffer
+          lastGuess={guesses[guesses.length - 1]}
+          question={question}
+          hintUsed={!!n?.hintUsed}
+          busy={busy || watching}
+          error={error}
+          onWatch={() => void withReward('extra_guess', { kind: 'extra' })}
+          onReveal={() => act({ kind: 'reveal' })}
+        />
+      )}
+
+      {!play?.finished && !awaitingExtra && (
         <>
           <Row style={{ gap: space.sm }}>
             <Animated.View
@@ -123,9 +152,18 @@ export function NumericPlay({
           <InlineError error={error} />
 
           {n?.canUseHint ? (
-            <Button title="Aralığı daralt  · −10 puan" icon="bulb-outline" kind="secondary" onPress={() => act({ kind: 'hint' })} disabled={busy} />
+            <Button
+              title="Video izle · aralığı daralt (−10)"
+              icon="play-circle-outline"
+              kind="secondary"
+              accessibilityHint="Kısa bir video izlersen cevabın bulunduğu aralık gösterilir, puanından 10 düşer"
+              onPress={() => void withReward('hint', { kind: 'hint' })}
+              disabled={busy}
+              loading={watching}
+            />
           ) : (
-            !n?.hintUsed && (
+            !n?.hintUsed &&
+            !n?.extraGuessUsed && (
               <T variant="caption" color="textMuted" center>
                 {question.hintAfterAttempts ?? 3}. tahminden sonra ipucu açılır
               </T>
@@ -134,6 +172,53 @@ export function NumericPlay({
         </>
       )}
     </View>
+  );
+}
+
+/** 6 hak bitti: cevabı görmeden önce ödüllü reklamla 1 tahmin daha ya da cevabı göster. */
+function ExtraGuessOffer({
+  lastGuess,
+  question,
+  hintUsed,
+  busy,
+  error,
+  onWatch,
+  onReveal,
+}: {
+  lastGuess: Guess | undefined;
+  question: PublicQuestion;
+  hintUsed: boolean;
+  busy: boolean;
+  error: unknown;
+  onWatch: () => void;
+  onReveal: () => void;
+}) {
+  const c = useColors();
+  const hintText = lastGuess ? `Son tahminin ${formatAmount(lastGuess.value, question.unit)}; cevap ${directionLabel(lastGuess.direction, question.format).toLocaleLowerCase('tr-TR')}.` : null;
+  return (
+    <Animated.View entering={FadeInDown.springify().damping(15)}>
+      <Card style={{ gap: space.md, borderWidth: 2, borderColor: c.accent }}>
+        <Row>
+          <View style={[styles.hintIcon, { backgroundColor: c.accentSoft }]}>
+            <Icon name="hourglass-outline" size={18} color={c.accent} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <T variant="bodyStrong">Hakların bitti, ama bir şansın daha var</T>
+            {hintText && (
+              <T variant="caption" color="textMuted">
+                {hintText}
+              </T>
+            )}
+          </View>
+        </Row>
+        <Button title="Video izle · 1 tahmin daha" icon="play-circle" size="lg" onPress={onWatch} loading={busy} />
+        <Button title="Cevabı göster" kind="ghost" onPress={onReveal} disabled={busy} />
+        <InlineError error={error} />
+        <T variant="caption" color="textSubtle" center>
+          {hintUsed ? '7. tahminde bulursan "bildin" sayılırsın (ipucu yüzünden 0 puan).' : '7. tahminde bulursan 10 puan alırsın.'}
+        </T>
+      </Card>
+    </Animated.View>
   );
 }
 

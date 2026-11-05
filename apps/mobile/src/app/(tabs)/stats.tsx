@@ -4,10 +4,11 @@ import { RefreshControl, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { serverNow } from '@/api/client';
-import { useStats, useStreakRepair } from '@/api/hooks';
+import { useStats } from '@/api/hooks';
 import type { Stats } from '@/api/types';
 import { useFormatStyle } from '@/components/game/formatStyle';
-import { Bar, Button, Card, ErrorView, Icon, InlineError, LoadingScreen, Row, Screen, SectionTitle, T, useToast } from '@/components/ui';
+import { StreakRepairCard } from '@/components/StreakRepairCard';
+import { Bar, Card, ErrorView, Icon, LoadingScreen, Row, Screen, SectionTitle, T } from '@/components/ui';
 import { addDays, FORMAT_LABEL, formatTrNumber, istanbulDay, shortWeekday } from '@/lib/format';
 import { font, fonts, radius, shadow, space } from '@/theme/tokens';
 import { useColors } from '@/theme/useTheme';
@@ -17,8 +18,6 @@ const CAL_GAP = 6;
 export default function StatsScreen() {
   const c = useColors();
   const stats = useStats();
-  const repair = useStreakRepair();
-  const toast = useToast();
 
   if (stats.isError) return <ErrorView error={stats.error} onRetry={() => void stats.refetch()} />;
   if (stats.isPending) return <LoadingScreen />;
@@ -36,24 +35,7 @@ export default function StatsScreen() {
 
       <StreakHero stats={s} />
 
-      {s.canRepairStreak && (
-        <Animated.View entering={FadeInDown.springify()}>
-          <Card style={{ gap: space.sm }}>
-            <Row>
-              <Icon name="bandage" size={20} color={c.flame} />
-              <T variant="bodyStrong">Dün oynamayı kaçırdın</T>
-            </Row>
-            <T color="textMuted">Serini haftada bir kez kurtarabilirsin.</T>
-            <Button
-              title="Seriyi kurtar"
-              icon="flame"
-              onPress={() => repair.mutate(undefined, { onSuccess: () => toast('Serin kurtarıldı 🔥') })}
-              loading={repair.isPending}
-            />
-            <InlineError error={repair.error} />
-          </Card>
-        </Animated.View>
-      )}
+      {s.canRepairStreak && <StreakRepairCard />}
 
       <Row style={{ alignItems: 'stretch' }}>
         <Tile icon="calendar" label="Oynanan gün" value={String(s.played)} />

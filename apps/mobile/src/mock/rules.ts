@@ -42,6 +42,37 @@ export function canUseHint(attempts: number, finished: boolean, hintUsed: boolea
   return !finished && !hintUsed && attempts >= NUMERIC.hintAfter && attempts < NUMERIC.maxAttempts;
 }
 
+// --- Ödüllü reklamla açılan haklar (v1.1, sunucuya henüz eklenmedi; bkz. docs/kararlar.md #51) ---
+
+/** Hak bittiğinde ödüllü reklamla alınabilen ek tahmin sayısı (soru başına). */
+export const EXTRA_GUESSES = 1;
+
+/** Arşivden günde ücretsiz açılabilen soru sayısı; sonrakiler ödüllü reklamla açılır. */
+export const ARCHIVE_FREE_PER_DAY = 1;
+
+export function numericMaxAttempts(extraUsed: boolean): number {
+  return NUMERIC.maxAttempts + (extraUsed ? EXTRA_GUESSES : 0);
+}
+
+/**
+ * 6 hak bitti, bilinemedi ve ek tahmin henüz alınmadı: cevap açılmadan önce oyuncuya
+ * "video izle, 1 tahmin daha" ya da "cevabı göster" seçeneği sunulur.
+ */
+export function awaitingExtraGuess(attempts: number, solved: boolean, finished: boolean, extraUsed: boolean): boolean {
+  return !finished && !solved && !extraUsed && attempts >= NUMERIC.maxAttempts;
+}
+
+export type ArchiveAccess = 'open' | 'free' | 'locked';
+
+/**
+ * Arşivdeki bir günün oynanabilirliği. `open`: zaten başlanmış ya da reklamla açılmış;
+ * `free`: ilk işlemde günün ücretsiz hakkı kullanılır; `locked`: ödüllü reklam gerekir.
+ */
+export function archiveAccess(started: boolean, unlocked: boolean, freeUsedToday: number): ArchiveAccess {
+  if (started || unlocked) return 'open';
+  return freeUsedToday < ARCHIVE_FREE_PER_DAY ? 'free' : 'locked';
+}
+
 /** Aynı soru için herkese aynı aralık (seed = soru id); cevap aralığın %20–80'inde. */
 export function buildHint(answer: number, seed: number, guesses: { value: number; direction: GuessDirection }[]) {
   const position = 0.2 + mulberry32(seed)() * 0.6;

@@ -1,5 +1,6 @@
 import { NativeTabs } from 'expo-router/native-tabs';
 
+import { useInterstitialTriggers } from '@/ads/useInterstitialTriggers';
 import { useReminderSync } from '@/lib/reminders';
 import { fonts } from '@/theme/tokens';
 import { useColors } from '@/theme/useTheme';
@@ -7,6 +8,7 @@ import { useColors } from '@/theme/useTheme';
 export default function TabLayout() {
   const c = useColors();
   useReminderSync();
+  useInterstitialTriggers();
 
   return (
     <NativeTabs

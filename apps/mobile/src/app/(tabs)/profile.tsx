@@ -1,10 +1,14 @@
 import { useQueryClient } from '@tanstack/react-query';
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { API_URL, IS_MOCK } from '@/api/client';
+import { useAds } from '@/ads/AdsProvider';
+import { AD_RULES } from '@/ads/config';
+import { recentAdEvents, subscribeAdEvents } from '@/ads/events';
+import { installDayNo, rollover } from '@/ads/policy';
+import { API_URL, IS_MOCK, serverNow } from '@/api/client';
 import { useMe, useStats, useUpdateMe } from '@/api/hooks';
 import {
   Button,
@@ -22,7 +26,7 @@ import {
   ToggleRow,
   useToast,
 } from '@/components/ui';
-import { trUpper } from '@/lib/format';
+import { istanbulDay, trUpper } from '@/lib/format';
 import { useHaptics } from '@/lib/haptics';
 import { ensureNotificationPermission } from '@/lib/reminders';
 import { mockAddLeagueBots, mockReset, mockShiftDays } from '@/mock/server';
@@ -183,6 +187,7 @@ export default function ProfileScreen() {
 function DevTools() {
   const qc = useQueryClient();
   const toast = useToast();
+  const ads = useAds();
   const refresh = () => qc.invalidateQueries();
   return (
     <>
@@ -211,6 +216,7 @@ function DevTools() {
               kind="secondary"
               onPress={async () => {
                 await mockReset();
+                ads.dev.reset();
                 await refresh();
                 toast('Test verileri sıfırlandı');
               }}
@@ -227,6 +233,69 @@ function DevTools() {
             toast(added > 0 ? `${added} test oyuncusu eklendi` : 'Önce Lig sekmesinden bir lig kur');
           }}
         />
+      </Card>
+      <AdDevTools />
+    </>
+  );
+}
+
+const EVENT_LABEL = { ad_shown: 'gösterildi', ad_rewarded: 'ödül verildi', ad_skipped: 'yarıda kapatıldı', ad_failed: 'yüklenemedi', ad_blocked: 'engellendi' } as const;
+
+/** Reklam sayaçları ve son olaylar; geçiş reklamlarını denemek için reklamsız dönemi atlama. */
+function AdDevTools() {
+  const c = useColors();
+  const ads = useAds();
+  const toast = useToast();
+  const events = useSyncExternalStore(subscribeAdEvents, recentAdEvents).slice(0, 6);
+  const today = istanbulDay(serverNow());
+  const l = ads.ledger ? rollover(ads.ledger, today) : null;
+
+  return (
+    <>
+      <SectionTitle>Reklam testi</SectionTitle>
+      <Card tone="muted">
+        <T variant="caption" color="textMuted">
+          Expo Go’da AdMob çalışmadığı için reklamlar “test reklamı” ekranıyla gösterilir. İlk {AD_RULES.graceDays} gün geçiş reklamı çıkmaz.
+        </T>
+        {l && (
+          <T variant="bodyStrong">
+            Kurulumun {installDayNo(l, today)}. günü · bugün {l.shown.length}/{AD_RULES.interstitialDailyCap} geçiş reklamı · {l.tabSwitches} sekme geçişi
+          </T>
+        )}
+        <Row>
+          <View style={{ flex: 1 }}>
+            <Button
+              title="İlk 2 günü atla"
+              icon="flash-outline"
+              kind="secondary"
+              onPress={() => {
+                ads.dev.skipGracePeriod();
+                toast('Kurulum 3. güne alındı');
+              }}
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Button
+              title="Sayaçları sıfırla"
+              icon="refresh"
+              kind="secondary"
+              onPress={() => {
+                ads.dev.reset();
+                toast('Reklam sayaçları sıfırlandı');
+              }}
+            />
+          </View>
+        </Row>
+        {events.length > 0 && (
+          <View style={{ gap: 2 }}>
+            {events.map((e, i) => (
+              <Text key={`${e.at}-${i}`} style={[font.caption, { color: e.type === 'ad_blocked' ? c.textSubtle : c.textMuted }]}>
+                {new Date(e.at).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} · {e.placement} {EVENT_LABEL[e.type]}
+                {e.reason ? ` (${e.reason})` : ''}
+              </Text>
+            ))}
+          </View>
+        )}
       </Card>
     </>
   );

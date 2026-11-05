@@ -37,6 +37,8 @@ export const lightColors = {
   flame: '#FF8A00',
   shadow: '#5A3A1A',
   overlay: 'rgba(20, 14, 8, 0.45)',
+  /** Tam ekran reklamın zemini; temadan bağımsız koyu (video oynatıcı gibi). */
+  adBackdrop: '#0B0B0F',
 };
 
 export type ThemeColors = typeof lightColors;
@@ -71,6 +73,8 @@ export const darkColors: ThemeColors = {
   flame: '#FF9A1F',
   shadow: '#000000',
   overlay: 'rgba(0, 0, 0, 0.6)',
+  /** Tam ekran reklamın zemini; temadan bağımsız koyu (video oynatıcı gibi). */
+  adBackdrop: '#0B0B0F',
 };
 
 /** Her formatın kendi rengi ve simgesi (Ionicons adı). */

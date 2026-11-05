@@ -51,6 +51,8 @@ interface MockPlay {
   steps: Step[];
   hintUsed: boolean;
   hint: { min: number; max: number } | null;
+  /** Ödüllü reklamla 7. tahmin alındı. */
+  extraGuess?: boolean;
   chosenOption: number | null;
   poll: { option: number; predictedPct: number; actualPct: number | null } | null;
   score: number | null;
@@ -64,6 +66,10 @@ interface MockState {
   streak: R.StreakState;
   me: Me;
   leagues: MockLeague[];
+  /** Ücretsiz arşiv hakkının kullanıldığı gün ve o gün kullanılan sayı. */
+  archiveFree: { day: string; used: number };
+  /** Ödüllü reklamla açılmış arşiv günleri. */
+  archiveUnlocked: string[];
   /** Geliştirici aracı: saati gün gün ileri almak için. */
   dayOffset: number;
 }
@@ -73,6 +79,8 @@ const freshState = (): MockState => ({
   streak: R.EMPTY_STREAK,
   me: { playerId: 'test-oyuncu', displayName: null, city: null, notifyHour: 9, createdAt: new Date().toISOString() },
   leagues: [],
+  archiveFree: { day: '', used: 0 },
+  archiveUnlocked: [],
   dayOffset: 0,
 });
 
@@ -234,7 +242,40 @@ function settleTrivia(q: ResolvedQuestion, p: MockPlay) {
   return true;
 }
 
-function buildState(q: ResolvedQuestion, p: MockPlay | undefined): PlayState {
+/**
+ * 6 hak bitmiş, oyuncu ek tahmin ile "cevabı göster" arasında seçim yapmadan gün geçtiyse
+ * oyun son tahmine göre kapanır (bekleyen soru seriyi ve ligi askıda bırakmasın).
+ * Ölçü sorunun günü değil oyunun başladığı gündür: arşiv sorusunun günü zaten geçmiştir.
+ */
+function settleNumeric(q: ResolvedQuestion, p: MockPlay, s: MockState) {
+  if (!isAwaitingExtra(q, p) || istanbulDay(p.startedAt) >= today()) return false;
+  revealNumeric(q, p, s);
+  return true;
+}
+
+function isAwaitingExtra(q: ResolvedQuestion, p: MockPlay): boolean {
+  const numeric = q.format === 'price' || q.format === 'number';
+  return numeric && R.awaitingExtraGuess(p.steps.length, !!p.solved, !!p.finishedAt, !!p.extraGuess);
+}
+
+function revealNumeric(q: ResolvedQuestion, p: MockPlay, s: MockState) {
+  const last = p.steps[p.steps.length - 1];
+  finish(q, p, R.numericScore(p.steps.length, false, last.value!, q.answer!, p.hintUsed), false, s);
+}
+
+function settleAll(q: ResolvedQuestion, p: MockPlay, s: MockState) {
+  settleTrivia(q, p);
+  settlePoll(q, p);
+  settleNumeric(q, p, s);
+}
+
+function archiveAccess(s: MockState, day: string): R.ArchiveAccess | null {
+  if (day >= today()) return null;
+  const freeUsed = s.archiveFree.day === today() ? s.archiveFree.used : 0;
+  return R.archiveAccess(!!s.plays[day], s.archiveUnlocked.includes(day), freeUsed);
+}
+
+function buildState(q: ResolvedQuestion, p: MockPlay | undefined, s: MockState): PlayState {
   const finished = !!p?.finishedAt;
   const steps = p?.steps ?? [];
   const numeric = q.format === 'price' || q.format === 'number';
@@ -253,12 +294,14 @@ function buildState(q: ResolvedQuestion, p: MockPlay | undefined): PlayState {
     numeric: numeric
       ? {
           attemptsUsed: steps.length,
-          maxAttempts: R.NUMERIC.maxAttempts,
+          maxAttempts: R.numericMaxAttempts(!!p?.extraGuess),
           guesses: steps.map((s) => ({ value: s.value!, direction: s.direction!, close: !!s.close })),
           hintUsed: !!p?.hintUsed,
           canUseHint: !!p && R.canUseHint(steps.length, finished, p.hintUsed),
           hintAfterAttempts: R.NUMERIC.hintAfter,
           hint: p?.hint ?? null,
+          canBuyExtraGuess: !!p && isAwaitingExtra(q, p),
+          extraGuessUsed: !!p?.extraGuess,
         }
       : null,
     trivia:
@@ -296,10 +339,21 @@ function buildState(q: ResolvedQuestion, p: MockPlay | undefined): PlayState {
           sourceDate: null,
         }
       : null,
+    archiveAccess: archiveAccess(s, q.day),
   };
 }
 
 function getOrCreate(s: MockState, q: ResolvedQuestion): MockPlay {
+  if (!s.plays[q.day]) {
+    const access = archiveAccess(s, q.day);
+    if (access === 'locked') {
+      throw new MockError(403, 'archive_locked', 'Bugünkü ücretsiz arşiv hakkını kullandın. Bu soruyu kısa bir videoyla açabilirsin.');
+    }
+    if (access === 'free') {
+      const t = today();
+      s.archiveFree = { day: t, used: (s.archiveFree.day === t ? s.archiveFree.used : 0) + 1 };
+    }
+  }
   return (s.plays[q.day] ??= {
     day: q.day,
     archive: q.day < today(),
@@ -384,11 +438,8 @@ function route(s: MockState, method: string, path: string, query: URLSearchParam
     if (method === 'GET' && !action) {
       const q = visibleQuestion(day);
       const p = s.plays[day];
-      if (p) {
-        settleTrivia(q, p);
-        settlePoll(q, p);
-      }
-      return buildState(q, p);
+      if (p) settleAll(q, p, s);
+      return buildState(q, p, s);
     }
     return playAction(s, playableQuestion(day), action, b);
   }
@@ -404,7 +455,7 @@ function playAction(s: MockState, q: ResolvedQuestion, action: string | undefine
       const p = getOrCreate(s, q);
       if (q.format === 'trivia' && !p.archive) s.streak = R.recordPlay(s.streak, q.day);
       settleTrivia(q, p);
-      return buildState(q, p);
+      return buildState(q, p, s);
     }
     case 'guess': {
       if (!numeric) throw wrongFormat();
@@ -413,13 +464,42 @@ function playAction(s: MockState, q: ResolvedQuestion, action: string | undefine
       if (!Number.isFinite(raw) || value <= 0) throw new MockError(400, 'invalid_guess', 'Tahmin 0’dan büyük bir sayı olmalı.');
       const p = getOrCreate(s, q);
       ensureNotFinished(p);
+      if (p.steps.length >= R.numericMaxAttempts(!!p.extraGuess)) {
+        throw new MockError(409, 'no_attempts_left', 'Tahmin hakkın bitti.');
+      }
       const fb = R.evaluateGuess(value, q.answer!);
       p.steps.push({ value, direction: fb.direction, close: fb.close });
       const solved = fb.direction === 'correct';
-      if (solved || p.steps.length >= R.NUMERIC.maxAttempts) {
-        finish(q, p, R.numericScore(p.steps.length, solved, value, q.answer!, p.hintUsed), solved, s);
+      if (solved) {
+        finish(q, p, R.numericScore(p.steps.length, true, value, q.answer!, p.hintUsed), true, s);
+      } else if (p.steps.length >= R.numericMaxAttempts(!!p.extraGuess) && !isAwaitingExtra(q, p)) {
+        // Ek tahmin teklif edilecekse oyun açık kalır; cevap oyuncu seçince açılır.
+        revealNumeric(q, p, s);
       }
-      return buildState(q, p);
+      return buildState(q, p, s);
+    }
+    case 'extra': {
+      // Ödüllü reklam izlendi (gerçek sunucuda AdMob SSV ile doğrulanacak).
+      if (!numeric) throw wrongFormat();
+      const p = s.plays[q.day];
+      if (!p || !isAwaitingExtra(q, p)) throw new MockError(409, 'extra_unavailable', 'Ek tahmin şu an alınamaz.');
+      p.extraGuess = true;
+      return buildState(q, p, s);
+    }
+    case 'reveal': {
+      if (!numeric) throw wrongFormat();
+      const p = s.plays[q.day];
+      if (!p || !isAwaitingExtra(q, p)) throw new MockError(409, 'reveal_unavailable', 'Cevap şu an açılamaz.');
+      revealNumeric(q, p, s);
+      return buildState(q, p, s);
+    }
+    case 'unlock': {
+      // Arşiv günü ödüllü reklamla açıldı.
+      if (q.day >= today()) throw new MockError(400, 'not_archive', 'Bu soru arşivde değil.');
+      if (!s.archiveUnlocked.includes(q.day)) s.archiveUnlocked.push(q.day);
+      const oldest = addDays(today(), -ARCHIVE_DAYS);
+      s.archiveUnlocked = s.archiveUnlocked.filter((d) => d >= oldest);
+      return buildState(q, s.plays[q.day], s);
     }
     case 'hint': {
       if (!numeric) throw wrongFormat();
@@ -432,7 +512,7 @@ function playAction(s: MockState, q: ResolvedQuestion, action: string | undefine
       }
       p.hintUsed = true;
       p.hint = R.buildHint(q.answer!, q.id, p.steps.map((x) => ({ value: x.value!, direction: x.direction! })));
-      return buildState(q, p);
+      return buildState(q, p, s);
     }
     case 'answer': {
       if (q.format !== 'trivia') throw wrongFormat();
@@ -442,14 +522,14 @@ function playAction(s: MockState, q: ResolvedQuestion, action: string | undefine
       }
       const p = s.plays[q.day];
       if (!p) throw new MockError(409, 'not_started', 'Önce soruyu aç.');
-      if (settleTrivia(q, p)) return buildState(q, p);
+      if (settleTrivia(q, p)) return buildState(q, p, s);
       ensureNotFinished(p);
       const elapsedMs = mockNow() - p.startedAt;
       const correct = option === q.correctOption;
       p.steps.push({ option, correct, elapsedMs });
       p.chosenOption = option;
       finish(q, p, R.triviaScore(correct, elapsedMs), correct, s);
-      return buildState(q, p);
+      return buildState(q, p, s);
     }
     case 'compare': {
       if (q.format !== 'compare') throw wrongFormat();
@@ -464,7 +544,7 @@ function playAction(s: MockState, q: ResolvedQuestion, action: string | undefine
         const results = p.steps.map((x) => !!x.correct);
         finish(q, p, R.compareScore(results), results.filter(Boolean).length >= R.COMPARE_SOLVED_ROUNDS, s);
       }
-      return buildState(q, p);
+      return buildState(q, p, s);
     }
     case 'poll': {
       if (q.format !== 'poll') throw wrongFormat();
@@ -483,7 +563,7 @@ function playAction(s: MockState, q: ResolvedQuestion, action: string | undefine
       p.poll = { option, predictedPct: predicted, actualPct: null };
       finish(q, p, null, false, s);
       settlePoll(q, p);
-      return buildState(q, p);
+      return buildState(q, p, s);
     }
   }
   throw new MockError(404, 'not_found', 'Aradığın şey bulunamadı.');
@@ -500,9 +580,7 @@ function leagueContext(s: MockState): LeagueContext {
     myCell: (day) => {
       const p = s.plays[day];
       if (!p || p.archive || day > today() || day < LAUNCH_DAY) return { played: false, score: null };
-      const q = questionFor(day);
-      settleTrivia(q, p);
-      settlePoll(q, p);
+      settleAll(questionFor(day), p, s);
       return p.finishedAt ? { played: true, score: p.score } : { played: false, score: null };
     },
   };
@@ -516,10 +594,7 @@ function archive(s: MockState): ArchiveItem[] {
     if (day < LAUNCH_DAY) break;
     const q = questionFor(day);
     const p = s.plays[day];
-    if (p) {
-      settlePoll(q, p);
-      settleTrivia(q, p);
-    }
+    if (p) settleAll(q, p, s);
     items.push({
       day,
       no: q.no,
@@ -530,6 +605,7 @@ function archive(s: MockState): ArchiveItem[] {
       finished: !!p?.finishedAt,
       score: p?.score ?? null,
       playedFromArchive: !!p?.archive,
+      locked: archiveAccess(s, day) === 'locked',
     });
   }
   return items;
@@ -541,8 +617,7 @@ function stats(s: MockState): Stats {
     .filter((p) => !p.archive)
     .map((p) => {
       const q = questionFor(p.day);
-      settlePoll(q, p);
-      settleTrivia(q, p);
+      settleAll(q, p, s);
       return { p, q };
     })
     .filter(({ p }) => p.finishedAt);

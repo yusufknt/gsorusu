@@ -40,6 +40,12 @@ export interface NumericState {
   canUseHint: boolean;
   hintAfterAttempts: number;
   hint: { min: number; max: number } | null;
+  /**
+   * v1.1 (sunucuya henüz eklenmedi): 6 hak bitti, bilinemedi; cevap açılmadan önce
+   * ödüllü reklamla 1 tahmin daha alınabilir. Eski sunucuda alan gelmez → sunulmaz.
+   */
+  canBuyExtraGuess?: boolean;
+  extraGuessUsed?: boolean;
 }
 
 export interface TriviaState {
@@ -105,7 +111,14 @@ export interface PlayState {
   compare: CompareState | null;
   poll: PollState | null;
   reveal: Reveal | null;
+  /**
+   * v1.1 (sunucuya henüz eklenmedi): yalnızca arşiv günlerinde. `free`: ilk işlemde günün
+   * ücretsiz arşiv hakkı kullanılır; `locked`: ödüllü reklamla açılmalı. Gelmezse kilit yok sayılır.
+   */
+  archiveAccess?: ArchiveAccess | null;
 }
+
+export type ArchiveAccess = 'open' | 'free' | 'locked';
 
 export interface Crowd {
   questionId: number;
@@ -151,6 +164,8 @@ export interface ArchiveItem {
   finished: boolean;
   score: number | null;
   playedFromArchive: boolean;
+  /** v1.1: ücretsiz arşiv hakkı bitti, ödüllü reklamla açılır. */
+  locked?: boolean;
 }
 
 export interface Me {

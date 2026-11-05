@@ -1,8 +1,8 @@
 # Nerede kaldık? — Günün Sorusu ?
 
-> Son güncelleme: **2 Kasım 2026**. Yeni oturumda "nerede kaldık?" sorusunun cevabı bu dosyadır.
+> Son güncelleme: **5 Kasım 2026**. Yeni oturumda "nerede kaldık?" sorusunun cevabı bu dosyadır.
 > Kod deposu: https://github.com/fxlonq/gununsorusu (`main`, 4 Kasım 2026'da ilk kez gönderildi).
-> Ayrıntılı teknik kararlar: [`kararlar.md`](kararlar.md) (#1–50). Ürün planı: `../Gunun-Sorusu-Plan-v2.pdf`.
+> Ayrıntılı teknik kararlar: [`kararlar.md`](kararlar.md) (#1–56). Ürün planı: `../Gunun-Sorusu-Plan-v2.pdf`.
 
 ## Çalışma ilkeleri (birlikte karar verdiklerimiz)
 
@@ -23,6 +23,7 @@
 | 5. Arkadaş ligi (kod, haftalık sıralama) | ✅ sunucu + mobil, emülatörde açık/koyu temada denendi | `Leagues/`, `app/(tabs)/leagues` |
 | 6. İlk açılış ipuçları + "dün" şeridi | ✅ emülatörde denendi; mobilde toplam 29 test | `components/game/FormatTip.tsx`, `YesterdayStrip.tsx` |
 | 7. Uygulama simgesi + açılış ekranı (geçici logo) | ✅ görseller üretildi, uygulama içi logo emülatörde denendi; expo-doctor 20/20 | `apps/mobile/scripts/render-brand.mjs`, `assets/` |
+| 8. Reklam yerleşimleri (ödüllü + geçiş), Expo Go'da test reklamıyla | ✅ emülatörde denendi; mobilde toplam 36 test | `apps/mobile/src/ads/` |
 
 ### Uygulamada şu an olanlar
 - **Formatlar:** Fiyatı Ne?, Sayı Tahmini, Türkiye ne diyor?, Bilgi (30 sn), Hangisi daha…? (5 tur).
@@ -32,8 +33,9 @@
 - **Dün şeridi:** Bugün ekranında dünkü puan ve Türkiye ortalaması ya da "kaçırdın, arşivden oyna"; dokununca arşivdeki o gün açılır.
 - **Oyun içi:** özel sayı tuş takımı, ipucu, halka şeklinde geri sayım, VS kartları, puan halkası, konfeti, titreşim.
 - **Paylaşım:** renkli kare metni, kopyalama, 1080×1920 hikâye görseli (cevabı göstermez).
+- **Reklamlar (test reklamıyla):** ödüllü video → 6 hak bitince 1 tahmin daha, ipucu, seri kurtarma, arşivde günlük ücretsiz hak bitince soru açma. Geçiş reklamı → sonuçtan sonra sekme değiştirirken, arşiv oyunu bitince, genel sekme geçişlerinde; günde en fazla 2, ilk 2 gün yok, soru bitmeden yok. Ayrıntı: kararlar #51–56.
 - **Diğer:** yerel günlük hatırlatma (+ seri tehlikedeyse 21:00), Sistem/Açık/Koyu tema, seri kurtarma.
-- **Test araçları (Profil):** "Bir gün ileri", "Sıfırla" ve "Liglerime test oyuncusu ekle"; yalnızca test modunda görünür. Test modunda geçerli herhangi bir kodla (ör. ABC234) katılınca test oyuncularından oluşan bir lig açılır.
+- **Test araçları (Profil):** "Bir gün ileri", "Sıfırla" ve "Liglerime test oyuncusu ekle"; ayrıca Reklam testi: kurulum günü, bugünkü geçiş reklamı sayısı, son reklam olayları, "İlk 2 günü atla", "Sayaçları sıfırla". Yalnızca test modunda görünür. Test modunda geçerli herhangi bir kodla (ör. ABC234) katılınca test oyuncularından oluşan bir lig açılır.
 
 ### Sunucuda şu an olanlar (hazır ama mobil henüz bağlı değil)
 - Cihaz kimliğiyle üyeliksiz giriş (JWT), bütün oyun uç noktaları, arşiv, istatistik, "Türkiye ne dedi?" dağılımı.
@@ -68,14 +70,16 @@ dotnet test                 # Docker açık olmalı
 
 1. **Gerçek soru içeriği**: test sorularının yerine doğrulanmış sorular (en az 30–60 günlük stok). Soru paneli v1.1'de; şimdilik `/admin`.
 2. **Simgeyi ve açılış ekranını gerçek bir derlemede görmek**: Expo Go kendi simgesini ve açılışını gösterir; development build ya da ilk EAS derlemesinde kontrol edilmeli.
-3. **En son: sunucuya bağlama ve yayın**: mobilin gerçek API'ye geçmesi, üretim ayarları, Cloudflare, GitHub Actions, Sentry, Takdir entegrasyonu, lig davet bağlantısı (universal link).
-4. **v1.1 (plana göre):** reklamlar (AdMob, UMP, ATT), soru paneli, Apple/Google ile giriş, webde oynama. Bunlar development build gerektirir.
+3. **Reklamlar için kalanlar**: sunucuya ek tahmin / arşiv kilidi / `extra`·`reveal`·`unlock` uç noktaları (kararlar #55), AdMob SSV doğrulaması, development build'de `react-native-google-mobile-ads` + UMP/ATT onayı, gerçek reklam birimi kimlikleri.
+4. **En son: sunucuya bağlama ve yayın**: mobilin gerçek API'ye geçmesi, üretim ayarları, Cloudflare, GitHub Actions, Sentry, Takdir entegrasyonu, lig davet bağlantısı (universal link).
+5. **v1.1 (plana göre):** soru paneli, Apple/Google ile giriş, webde oynama. Bunlar development build gerektirir.
 
 ## Senin karar vermen gerekenler
 
 - [ ] **Uygulama kimliği** `app.gununsorusu` uygun mu? Mağazaya ilk yüklemeden sonra değiştirilemez.
 - [ ] **"Bilindi" ölçütü:** sayısalda ±%5, bilgide süresinde doğru, Hangisi daha…?'da ≥3/5, ankette ≥80 puan. Uygun mu?
 - [ ] **Logo:** şimdilik Claude'un tasarladığı geçici logo kullanılıyor (güneş noktalı "?"). Beğenmezsen ya da profesyonel logo gelirse `scripts/render-brand.mjs` ile tek komutta değişir.
+- [ ] **Reklam sıklığı:** geçiş reklamı günde en fazla 2 (plandaki sınır), sekme geçişinde her 4 geçişte bir aday, ödüllü video Expo Go testinde 5 sn. Uygun mu? (`src/ads/config.ts`)
 - [ ] **Mağaza adı rezervasyonu** (App Store Connect / Play Console): plandaki ilk iş, senin hesabınla yapılmalı.
 
 ## Bilinen eksikler / notlar
@@ -84,5 +88,6 @@ dotnet test                 # Docker açık olmalı
 - Hatırlatma bildiriminin gerçekten geldiği emülatörde denenmedi; ayar ve zamanlama kodu hazır.
 - iOS'ta hiç çalıştırılmadı (bu makinede mümkün değil).
 - Yeni simge ve açılış ekranı yalnızca dosya olarak kontrol edildi; Expo Go bunları göstermez (bkz. sıradaki adımlar).
+- Reklamlar yalnızca test ekranıyla gösteriliyor; ödüller şimdilik istemcide veriliyor (gerçek sunucuda SSV şart). "Arşiv oyunu bitince geçiş reklamı" (after_archive) emülatörde henüz denenmedi; diğer reklam akışları denendi.
 - Lig davet bağlantısı (`gununsorusu.app/lig/KOD`) yayın aşamasına kadar çalışmaz; kod elle girilir.
 - `appsettings.Development.json` içindeki anahtarlar yalnızca geliştirme içindir; üretimde ortam değişkeni kullanılacak.

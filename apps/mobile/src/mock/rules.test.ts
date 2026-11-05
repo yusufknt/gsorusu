@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
+  archiveAccess,
+  awaitingExtraGuess,
+  numericMaxAttempts,
   buildHint,
   canRepair,
   compareScore,
@@ -38,6 +41,27 @@ test('sayısal puan', () => {
   assert.equal(numericScore(6, false, 60, 100, false), 5);
   assert.equal(numericScore(6, false, 95, 100, false), 20);
   assert.equal(numericScore(6, false, 10, 100, true), 0);
+});
+
+test('ödüllü ek tahmin', () => {
+  assert.equal(numericMaxAttempts(false), 6);
+  assert.equal(numericMaxAttempts(true), 7);
+  // Yalnızca 6 hak bitip bilinemediyse ve daha önce alınmadıysa sunulur.
+  assert.equal(awaitingExtraGuess(6, false, false, false), true);
+  assert.equal(awaitingExtraGuess(5, false, false, false), false);
+  assert.equal(awaitingExtraGuess(6, true, false, false), false);
+  assert.equal(awaitingExtraGuess(6, false, true, false), false);
+  assert.equal(awaitingExtraGuess(7, false, false, true), false);
+  // 7. hakta bulmak: 100 − 6×15 = 10; ipucuyla 0.
+  assert.equal(numericScore(7, true, 100, 100, false), 10);
+  assert.equal(numericScore(7, true, 100, 100, true), 0);
+});
+
+test('arşiv: günde 1 ücretsiz, sonrası reklamla', () => {
+  assert.equal(archiveAccess(false, false, 0), 'free');
+  assert.equal(archiveAccess(false, false, 1), 'locked');
+  assert.equal(archiveAccess(true, false, 1), 'open');
+  assert.equal(archiveAccess(false, true, 1), 'open');
 });
 
 test('ipucu cevabı içerir ve herkese aynıdır', () => {

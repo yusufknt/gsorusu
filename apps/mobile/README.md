@@ -16,6 +16,12 @@ sunucudaki `GununSorusu.Domain` ile birebir aynıdır (`src/mock/rules.ts`, test
 Gerçek sunucuya bağlanmak için (`services/gunun-api`, `docker compose up -d`):
 `EXPO_PUBLIC_API_URL=http://10.0.2.2:5080` (emülatör) ya da bilgisayarın yerel ağ adresi (gerçek telefon).
 
+**Web ve Google ile giriş:** ilk kurulumda bir kez `.env.example` dosyasını `.env` olarak kopyalayın
+(`copy .env.example .env`; içindeki Google kimlikleri gizli değildir). Sonra `npx expo start --web` → http://localhost:8081.
+Adres Google Cloud'da kayıtlı olduğu için port 8081 kalmalı.
+Telefonda Google ile giriş uygulamanın kendi derlemesinde çalışır: `npm run android:build` (Android Studio SDK'sı ve açık bir
+emülatör / USB'li telefon gerekir; ilk derleme ~15 dk). Expo Go'da (`npx expo start`) her şey çalışır, yalnız Google butonu "çok yakında" der.
+
 Yalnızca Expo Go'da bulunan kütüphaneler kullanılır; development build şimdilik gerekmez.
 
 ## Komutlar

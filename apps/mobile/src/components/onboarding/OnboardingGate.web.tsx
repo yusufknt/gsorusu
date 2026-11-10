@@ -9,7 +9,7 @@ import { LoadingScreen } from '@/components/ui';
  */
 const CANVASKIT = 'https://cdn.jsdelivr.net/npm/canvaskit-wasm@0.41.0/bin/full/';
 
-export default function OnboardingWeb() {
+export default function OnboardingGate() {
   return (
     <WithSkiaWeb
       getComponent={() => import('@/components/onboarding/Onboarding')}

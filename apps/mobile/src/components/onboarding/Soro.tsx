@@ -100,6 +100,14 @@ function arcAt(t: number, period: number, at: number, len: number) {
   const k = ((t % period) / period - at) / len;
   return k > 0 && k < 1 ? Math.sin(Math.PI * k) : 0;
 }
+/**
+ * Doğrusal ara değer. Modül düzeyinde ve 'worklet' olmalı: bileşen içinde tanımlanınca React Compiler onu
+ * `_temp` olarak dışarı taşıyor, UI iş parçacığından çağrılınca telefonda uygulama hata veriyordu.
+ */
+function lerp(a: number, b: number, k: number) {
+  'worklet';
+  return a + (b - a) * k;
+}
 
 /**
  * Soro, 80×80 birimlik alanda. Her kare tek bir "poz" hesaplanır; parçalar oradan okur.
@@ -146,7 +154,6 @@ export function Soro({ t, step, look, squish, tilt, held, react, reactP, pull, d
     const wave = w0 * (0.5 + 0.32 * Math.sin(tt / 150));
     const jig = (i: number) => Math.sin(tt / (260 + i * 41) + i * 1.3) * 0.08;
     const dangle = h * 0.4 * Math.sin(tt / 110);
-    const lerp = (a: number, b: number, k: number) => a + (b - a) * k;
 
     // Kol (çizgi): boşta çenesinde hafifçe kıpırdar; hâllere göre omuzdan döner (− yukarı kaldırır).
     const free = 1 - h;

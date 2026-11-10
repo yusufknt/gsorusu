@@ -1,6 +1,6 @@
 # Nerede kaldık? — Günün Sorusu ?
 
-> Son güncelleme: **5 Kasım 2026**. Yeni oturumda "nerede kaldık?" sorusunun cevabı bu dosyadır.
+> Son güncelleme: **10 Kasım 2026**. Yeni oturumda "nerede kaldık?" sorusunun cevabı bu dosyadır.
 > Kod deposu: https://github.com/fxlonq/gununsorusu (`main`, 4 Kasım 2026'da ilk kez gönderildi).
 > Ayrıntılı teknik kararlar: [`kararlar.md`](kararlar.md) (#1–56). Ürün planı: `../Gunun-Sorusu-Plan-v2.pdf`.
 
@@ -26,6 +26,7 @@
 | 8. Reklam yerleşimleri (ödüllü + geçiş), Expo Go'da test reklamıyla | ✅ emülatörde denendi; mobilde toplam 36 test | `apps/mobile/src/ads/` |
 
 ### Uygulamada şu an olanlar
+- **Google ile giriş (karar #94–96; Google Cloud: gununsorusu026@gmail.com, proje gunun-sorusu-514317):** tanıtımın son adımında ve Profil > Hesap kartında. **Herkese açık** (OAuth yayında; gizlilik sayfası https://yusufknt.github.io/gunun-sorusu-site/). Web: `cd apps/mobile` → `npx expo start --web` → http://localhost:8081 (port 8081 olmalı, Google'da kayıtlı adres bu). Android: `npm run android:build` (uygulamanın kendi derlemesi; Android SDK + emülatör ya da USB'li telefon; Windows'ta SDK ninja 1.12+ olmalı, #96). Pixel_9_Pro emülatöründe giriş uçtan uca denendi. Expo Go'da buton "çok yakında" der. iOS kodu ve Google istemcisi hazır, derleme Mac ya da EAS + Apple hesabı ister. Google jetonu test sunucusunda da imzasıyla doğrulanır.
 - **Premium, sınırsız mod, sıralama, grafikler (karar #84–89, yalnız test sunucusunda):** onboarding'de girişten önce Ücretsiz / Premium (aylık 20 TL, test satın alması) seçimi, Profil'de premium bölümü; premium: sınırsız Hangisi pahalı? (`/practice`, günün pahalı oyunu bitince) ve reklamsız oyun. Gün bitince "Bugün oyuncuların %X'inden iyisin" kartı; Seri sayfasında mod mod başarı ve Wordle tarzı dağılım.
 - **Hangi ünlü?, ikonlar, koleksiyon (karar #74–79):** 135 ünlü (110'unda açık lisanslı fotoğraf), 10 hak, ipuçları, olası ünlüler ve gizli ünlü kartı; Soro tarzı çizim ikonlar; 15 günlük yapboz, her yapbozda farklı resim, Koleksiyonum sayfası (Bugün'den bağlantı). Açık konu: ünlü fotoğrafları için hukuk görüşü.
 - **Web kabuğu ve maskot (karar #71–72):** web'de üst menü / alt sekme + her sayfada aynı başlık kalıbı (PageHero) ve konuşan Soro; Bugün'de 2×2 mod kartları.
@@ -40,6 +41,7 @@
 
 ### Sunucuda şu an olanlar (hazır ama mobil henüz bağlı değil)
 - Cihaz kimliğiyle üyeliksiz giriş (JWT), bütün oyun uç noktaları, arşiv, istatistik, "Türkiye ne dedi?" dağılımı.
+- `POST /auth/google`: Google id_token'ı doğrular, cihazdaki oyuncuyu Google hesabına bağlar ya da hesabın bağlı olduğu oyuncuya geçer (migration `GoogleSignIn`, karar #94).
 - Dakikalık işler: soruyu yayına alma, anketi kapatma, dağılımı hesaplama.
 - Geçici soru girişi: `/admin` (X-Admin-Key). Çift onay kuralı uygulanıyor. Hatalı soru iptali: herkese 100 puan, seri bozulmaz.
 
@@ -72,7 +74,7 @@ dotnet test                 # Docker açık olmalı
 2. **Simgeyi ve açılış ekranını gerçek bir derlemede görmek**: Expo Go kendi simgesini ve açılışını gösterir; development build ya da ilk EAS derlemesinde kontrol edilmeli.
 3. **Reklamlar için kalanlar**: sunucuya ek tahmin / arşiv kilidi / `extra`·`reveal`·`unlock` uç noktaları (kararlar #55), AdMob SSV doğrulaması, development build'de `react-native-google-mobile-ads` + UMP/ATT onayı, gerçek reklam birimi kimlikleri.
 4. **En son: sunucuya bağlama ve yayın**: mobilin gerçek API'ye geçmesi, üretim ayarları, Cloudflare, GitHub Actions, Sentry, Takdir entegrasyonu.
-5. **v1.1 (plana göre):** soru paneli, Apple/Google ile giriş, webde oynama. Bunlar development build gerektirir.
+5. **v1.1 (plana göre):** soru paneli, Apple ile giriş, telefonda Google ile giriş (web hazır, #94), webde oynama. Bunlar development build gerektirir.
 
 ## Senin karar vermen gerekenler
 

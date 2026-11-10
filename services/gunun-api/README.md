@@ -28,6 +28,7 @@ dotnet test    # Docker açık olmalı: API testleri Testcontainers ile gerçek 
 | Yöntem | Adres | Açıklama |
 |---|---|---|
 | POST | `/auth/device` | `{deviceId}` → `{token, playerId}`. Üyeliksiz kimlik. |
+| POST | `/auth/google` | `{idToken}` → `{token, playerId, email, displayName, switched}`. Cihaz oturumunu Google hesabına bağlar (`Google:ClientIds`). |
 | GET/PATCH | `/me` | Görünen ad, şehir, bildirim saati. |
 | GET | `/q/today`, `/q/{gün}` | Herkese açık soru (cevapsız, önbelleklenebilir). |
 | GET | `/plays/{gün}` | Oyuncunun o sorudaki durumu. |

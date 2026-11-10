@@ -10,6 +10,7 @@ import { recentAdEvents, subscribeAdEvents } from '@/ads/events';
 import { installDayNo, rollover } from '@/ads/policy';
 import { API_URL, IS_MOCK, serverNow } from '@/api/client';
 import { useMe, useStats, useUpdateMe } from '@/api/hooks';
+import { AccountCard } from '@/components/account/AccountCard';
 import { Columns } from '@/components/layout/Columns';
 import { PageHero } from '@/components/layout/PageHero';
 import { PremiumCard } from '@/components/premium/PremiumCard';
@@ -70,6 +71,9 @@ export default function ProfileScreen() {
       <Columns
         main={
           <>
+            <SectionTitle>Hesap</SectionTitle>
+            <AccountCard me={me.data} />
+
             <SectionTitle>Profil</SectionTitle>
             <Card>
               <T variant="bodyStrong">Görünen ad</T>
@@ -177,7 +181,8 @@ export default function ProfileScreen() {
                 <View style={{ flex: 1, gap: 2 }}>
                   <T variant="bodyStrong">Gizlilik</T>
                   <T variant="caption" color="textMuted">
-                    Üyelik yok, e-posta toplamıyoruz. Seni yalnızca bu cihaza özel rastgele bir kimlikle tanıyoruz.
+                    Misafir oynarsan seni yalnızca bu cihaza özel rastgele bir kimlikle tanırız. Google ile giriş yaparsan
+                    yalnızca adını ve e-postanı, hesabını tanımak için saklarız.
                   </T>
                 </View>
               </Row>

@@ -1,34 +1,17 @@
-import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { useGoogleAccount } from '@/components/account/useGoogleAccount';
 import { GoogleButton } from '@/components/GoogleButton';
-import { Button, useToast } from '@/components/ui';
-import { GoogleAuthUnavailableError, signInWithGoogle } from '@/lib/googleAuth';
-import { useHaptics } from '@/lib/haptics';
+import { Button } from '@/components/ui';
 import { space } from '@/theme/tokens';
 
 /** Tanıtımın son adımı: Google ile giriş ya da misafir olarak devam. İkisi de bitince `onDone` çağrılır. */
 export function AuthActions({ onDone }: { onDone: () => void }) {
-  const toast = useToast();
-  const buzz = useHaptics();
-  const [busy, setBusy] = useState(false);
-
-  const google = async () => {
-    setBusy(true);
-    try {
-      await signInWithGoogle();
-      onDone();
-    } catch (e) {
-      buzz('warning');
-      toast(e instanceof GoogleAuthUnavailableError ? 'Google ile giriş çok yakında' : 'Google ile giriş yapılamadı');
-    } finally {
-      setBusy(false);
-    }
-  };
+  const account = useGoogleAccount();
 
   return (
     <View style={styles.stack}>
-      <GoogleButton onPress={google} loading={busy} />
+      <GoogleButton onPress={() => void account.signIn().then((ok) => ok && onDone())} loading={account.busy} />
       <Button title="Misafir olarak devam et" kind="ghost" onPress={onDone} />
     </View>
   );

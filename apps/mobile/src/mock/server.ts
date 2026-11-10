@@ -34,6 +34,8 @@ import { modeStats, type PlayRecord } from './modeStats';
 import { toPublic } from './publicQuestion';
 import { SOURCE_TEXT, type ResolvedQuestion } from './questions';
 import { artFor } from '../lib/puzzleArt';
+import { InvalidIdTokenError, type GoogleClaims } from '../lib/googleIdToken';
+import { verifyInTestServer } from './googleVerify';
 import * as R from './rules';
 
 const STORAGE_KEY = 'gunun.mock.v2';
@@ -462,6 +464,11 @@ export async function mockApi<T>(method: string, path: string, body?: unknown): 
   // Ağ gecikmesi hissi; yükleniyor durumları da görünsün.
   await new Promise((r) => setTimeout(r, 120));
   const [pathname, search = ''] = path.split('?');
+  if (method === 'POST' && pathname === '/auth/google') {
+    const result = applyGoogleSignIn(s, await verifiedGoogleClaims(b));
+    await save();
+    return result as T;
+  }
   const result = route(s, method, pathname, new URLSearchParams(search), b);
   await save();
   return result as T;
@@ -755,6 +762,37 @@ function stats(s: MockState): Stats {
 export async function mockShiftDays(n: number) {
   const s = await load();
   s.dayOffset += n;
+  await save();
+}
+
+/**
+ * Test sunucusunda Google ile giriş. id_token, gerçek sunucudaki gibi Google'ın açık anahtarlarıyla doğrulanır
+ * (imza, yayıncı, hedef kitle, süre; `lib/googleIdToken.ts`). Test verisi tek oyunculu olduğu için ilerleme korunur.
+ */
+async function verifiedGoogleClaims(b: Body): Promise<GoogleClaims> {
+  const invalid = () => new MockError(400, 'invalid_google_token', 'Google girişi doğrulanamadı. Lütfen tekrar dene.');
+  if (typeof b?.idToken !== 'string' || b.idToken.length > 8192) throw invalid();
+  try {
+    return await verifyInTestServer(b.idToken);
+  } catch (e) {
+    if (e instanceof InvalidIdTokenError) throw invalid();
+    throw new MockError(503, 'google_unreachable', 'Google’a ulaşılamadı. İnternet bağlantını kontrol edip tekrar dene.');
+  }
+}
+
+function applyGoogleSignIn(s: MockState, claims: GoogleClaims) {
+  const name = claims.name?.trim().slice(0, 24).trim() ?? '';
+  s.me.authProvider = 'google';
+  s.me.email = claims.email;
+  if (!s.me.displayName && name) s.me.displayName = name;
+  return { token: 'mock', playerId: s.me.playerId, email: claims.email, displayName: s.me.displayName, switched: false };
+}
+
+/** Test sunucusunda çıkış: Google bağlantısı kaldırılır, test verisi (seri, puanlar) olduğu gibi kalır. */
+export async function mockGoogleSignOut() {
+  const s = await load();
+  s.me.authProvider = null;
+  s.me.email = null;
   await save();
 }
 

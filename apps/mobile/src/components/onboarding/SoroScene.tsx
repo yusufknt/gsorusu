@@ -111,7 +111,6 @@ export default function SoroScene({ step, size, colors, reduced, onPoke, onPickB
   const react = useSharedValue(-1);
   const reactP = useSharedValue(1);
   const dizzy = useSharedValue(0);
-  (globalThis as unknown as Record<string, unknown>).__soroDebug = { dragX, dragY, held, react, reactP, dizzy, size }; // GEÇİCİ
   // Sürükleme, sahne boyuna göre (Soro'nun adıma özgü hâlleri bunu okur).
   const pull = useDerivedValue(() => ({ x: dragX.get() / (size * 0.35), y: dragY.get() / (size * 0.35) }));
 

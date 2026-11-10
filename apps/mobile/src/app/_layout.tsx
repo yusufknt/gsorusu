@@ -19,9 +19,13 @@ import { AdsProvider } from '@/ads/AdsProvider';
 import { ApiError } from '@/api/client';
 import { WebStackHeader } from '@/components/layout/WebChrome';
 import { ToastProvider } from '@/components/ui';
+import { completeGoogleRedirect } from '@/lib/googleAuth';
 import { SettingsProvider, useSettings } from '@/settings/settings';
 import { fonts } from '@/theme/tokens';
 import { useColors, useIsDark } from '@/theme/useTheme';
+
+// Web: Google giriş penceresi buraya döndüyse sonucu ana pencereye iletip kapanır.
+completeGoogleRedirect();
 
 void SplashScreen.preventAutoHideAsync();
 

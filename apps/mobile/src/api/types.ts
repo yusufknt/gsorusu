@@ -374,4 +374,17 @@ export interface Me {
   city: string | null;
   notifyHour: number;
   createdAt: string;
+  /** null: misafir. Eski test verisinde alan hiç olmayabilir. */
+  authProvider?: 'google' | null;
+  /** Bağlı Google hesabının e-postası (yalnızca Profil'de gösterilir). */
+  email?: string | null;
+}
+
+export interface GoogleAuthResult {
+  token: string;
+  playerId: string;
+  email: string | null;
+  displayName: string | null;
+  /** true: bu Google hesabı başka bir oyuncuya bağlıydı, oturum o oyuncuya geçti. */
+  switched: boolean;
 }

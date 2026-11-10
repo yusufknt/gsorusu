@@ -45,6 +45,9 @@ public sealed class GunDbContext(DbContextOptions<GunDbContext> options) : DbCon
             e.Property(p => p.DeviceIdHash).HasColumnName("device_id").HasMaxLength(64);
             e.HasIndex(p => p.DeviceIdHash).IsUnique();
             e.Property(p => p.AuthProvider).HasMaxLength(16);
+            e.Property(p => p.GoogleSub).HasMaxLength(64);
+            e.HasIndex(p => p.GoogleSub).IsUnique();
+            e.Property(p => p.Email).HasMaxLength(254);
             e.Property(p => p.DisplayName).HasMaxLength(24);
             e.Property(p => p.City).HasMaxLength(40);
         });

@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using GununSorusu.Api.Auth;
 using GununSorusu.Api.Data;
 using GununSorusu.Api.Jobs;
 using Microsoft.AspNetCore.Hosting;
@@ -68,6 +69,8 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         {
             s.RemoveAll<TimeProvider>();
             s.AddSingleton<TimeProvider>(Clock);
+            s.RemoveAll<IGoogleTokenValidator>();
+            s.AddSingleton<IGoogleTokenValidator>(new FakeGoogle());
         });
     }
 
@@ -113,6 +116,25 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         var body = await res.Content.ReadFromJsonAsync<JsonElement>();
         c.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", body.GetProperty("token").GetString());
         return c;
+    }
+}
+
+/// <summary>
+/// Google'a gitmeden id_token doğrulama: "google|sub|e-posta|ad" biçimindeki jetonları geçerli sayar.
+/// Gerçek doğrulama (imza, süre, hedef kitle) Google.Apis.Auth kütüphanesindedir.
+/// </summary>
+public sealed class FakeGoogle : IGoogleTokenValidator
+{
+    public bool Enabled => true;
+
+    public static string Token(string sub, string? email = null, string? name = null) => $"google|{sub}|{email}|{name}";
+
+    public Task<GoogleIdentity?> ValidateAsync(string idToken, CancellationToken ct)
+    {
+        var parts = idToken.Split('|');
+        return Task.FromResult(parts is ["google", { Length: > 0 } sub, var email, var name]
+            ? new GoogleIdentity(sub, email.Length > 0 ? email : null, name.Length > 0 ? name : null)
+            : null);
     }
 }
 

@@ -128,6 +128,16 @@ namespace GununSorusu.Api.Data.Migrations
                         .HasColumnType("character varying(24)")
                         .HasColumnName("display_name");
 
+                    b.Property<string>("Email")
+                        .HasMaxLength(254)
+                        .HasColumnType("character varying(254)")
+                        .HasColumnName("email");
+
+                    b.Property<string>("GoogleSub")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("google_sub");
+
                     b.Property<int>("NotifyHour")
                         .HasColumnType("integer")
                         .HasColumnName("notify_hour");
@@ -138,6 +148,10 @@ namespace GununSorusu.Api.Data.Migrations
                     b.HasIndex("DeviceIdHash")
                         .IsUnique()
                         .HasDatabaseName("ix_players_device_id");
+
+                    b.HasIndex("GoogleSub")
+                        .IsUnique()
+                        .HasDatabaseName("ix_players_google_sub");
 
                     b.ToTable("players", (string)null);
                 });

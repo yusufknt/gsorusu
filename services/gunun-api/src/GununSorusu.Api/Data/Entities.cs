@@ -82,6 +82,12 @@ public sealed class Player
     /// <summary>null (anonim) / apple / google — v1.1.</summary>
     public string? AuthProvider { get; set; }
 
+    /// <summary>Bağlı Google hesabının değişmez kimliği ("sub"). Bir Google hesabı tek oyuncuya bağlanır.</summary>
+    public string? GoogleSub { get; set; }
+
+    /// <summary>Google hesabının doğrulanmış e-postası; yalnızca Profil'de hesabı tanıtmak için.</summary>
+    public string? Email { get; set; }
+
     public string? DisplayName { get; set; }
     public string? City { get; set; }
     public int NotifyHour { get; set; } = 9;

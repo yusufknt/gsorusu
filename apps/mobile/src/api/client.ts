@@ -116,6 +116,22 @@ async function toApiError(res: Response): Promise<ApiError> {
   return new ApiError(res.status, 'error', 'Bir şeyler ters gitti. Lütfen biraz sonra tekrar dene.');
 }
 
+/** Başka bir yoldan (Google ile giriş) alınan oturum jetonunu kullanmaya başlar. */
+export async function adoptSession(newToken: string): Promise<void> {
+  token = newToken;
+  await storage.set(TOKEN_KEY, newToken);
+}
+
+/**
+ * Çıkış: oturum jetonu ve cihaz kimliği silinir. Sonraki istekte yeni bir misafir oyuncu açılır;
+ * Google hesabına bağlı ilerleme sunucuda kalır ve yeniden girişte geri gelir.
+ */
+export async function resetSession(): Promise<void> {
+  token = null;
+  await storage.remove(TOKEN_KEY);
+  await storage.remove(DEVICE_KEY);
+}
+
 /** Oturum gerekiyorsa açar; jeton süresi dolmuşsa aynı cihaz kimliğiyle sessizce yeniler. */
 export async function api<T>(method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE', path: string, body?: unknown): Promise<T> {
   if (IS_MOCK) {

@@ -21,6 +21,7 @@ var config = builder.Configuration;
 
 services.Configure<GameOptions>(config.GetSection("Game"));
 services.Configure<AuthOptions>(config.GetSection("Auth"));
+services.Configure<GoogleAuthOptions>(config.GetSection("Google"));
 services.Configure<AdminOptions>(config.GetSection("Admin"));
 services.Configure<RateLimitOptions>(config.GetSection("RateLimit"));
 services.Configure<ProxyOptions>(config.GetSection("Proxy"));
@@ -31,6 +32,7 @@ services.Configure<JobOptions>(config.GetSection("Jobs"));
 services.AddSingleton(TimeProvider.System);
 services.AddSingleton<GameClock>();
 services.AddSingleton<TokenService>();
+services.AddSingleton<IGoogleTokenValidator, GoogleTokenValidator>();
 services.AddScoped<StreakService>();
 services.AddScoped<PlayService>();
 services.AddScoped<DailyJobRunner>();

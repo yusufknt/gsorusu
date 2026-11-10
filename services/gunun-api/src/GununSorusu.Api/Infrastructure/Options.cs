@@ -19,6 +19,15 @@ public sealed class AuthOptions
     public int TokenDays { get; set; } = 180;
 }
 
+public sealed class GoogleAuthOptions
+{
+    /// <summary>
+    /// Kabul edilen Google OAuth istemci kimlikleri (web, Android, iOS). Boşsa Google ile giriş kapalıdır.
+    /// Gizli değildir. Ortam değişkeni: Google__ClientIds__0=...apps.googleusercontent.com
+    /// </summary>
+    public string[] ClientIds { get; set; } = [];
+}
+
 public sealed class AdminOptions
 {
     /// <summary>

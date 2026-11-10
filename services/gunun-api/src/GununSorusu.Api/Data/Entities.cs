@@ -200,26 +200,3 @@ public sealed class QuestionCrowd
 
     public DateTimeOffset UpdatedAt { get; set; }
 }
-
-/// <summary>Arkadaş ligi (aile, iş yeri). Lige <see cref="Code"/> ile girilir.</summary>
-public sealed class League
-{
-    public Guid Id { get; set; }
-
-    /// <summary>6 karakter, tekil (bkz. GununSorusu.Domain.Leagues.LeagueCode).</summary>
-    public string Code { get; set; } = "";
-
-    public string Name { get; set; } = "";
-
-    /// <summary>Ligi kuran ya da ondan devralan üye. Üyeleri yalnızca o çıkarabilir.</summary>
-    public Guid OwnerId { get; set; }
-
-    public DateTimeOffset CreatedAt { get; set; }
-}
-
-public sealed class LeagueMember
-{
-    public Guid LeagueId { get; set; }
-    public Guid PlayerId { get; set; }
-    public DateTimeOffset JoinedAt { get; set; }
-}

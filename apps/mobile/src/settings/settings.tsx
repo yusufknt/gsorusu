@@ -11,9 +11,11 @@ export interface Settings {
   reminders: boolean;
   /** İpucu kartı gösterilmiş (ya da oynanmış) formatlar; ilk karşılaşma ipucu bir daha çıkmaz. */
   seenFormats: QuestionFormat[];
+  /** İlk açılış tanıtımı (Soro) görüldü ya da atlandı; görülene kadar kök yığın tanıtıma yönlendirir. */
+  onboarded: boolean;
 }
 
-const DEFAULTS: Settings = { theme: 'system', haptics: true, reminders: false, seenFormats: [] };
+const DEFAULTS: Settings = { theme: 'system', haptics: true, reminders: false, seenFormats: [], onboarded: false };
 const KEY = 'gunun.settings.v1';
 
 interface Ctx {

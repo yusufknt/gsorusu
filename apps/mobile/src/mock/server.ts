@@ -1,26 +1,42 @@
 /**
- * Uygulama içi test sunucusu. Gerçek API ile aynı adresleri, aynı DTO'ları ve aynı Türkçe hata
- * kodlarını üretir; böylece ekranlar iki modda da aynı kodla çalışır. Veriler cihazda saklanır.
+ * Uygulama içi test sunucusu. Gerçek API ile aynı DTO'ları ve aynı Türkçe hata kodlarını üretir;
+ * böylece ekranlar iki modda da aynı kodla çalışır. Veriler cihazda saklanır.
+ *
+ * Günlük set (docs/kararlar.md #61, #67): her gün dört mod (pahali · kac · yapar · unlu). Her mod ayrı
+ * oynanır; gün hepsi bitince tamamlanır, seri bir artar ve yapboza bir parça eklenir.
+ * Adresler: /days/{gün}, /q/{gün}/{mod}, /plays/{gün}/{mod}[/{işlem}]. Gerçek sunucu henüz tek
+ * soruluk eski yapıda; bu adresler sunucuya taşınacak (DURUM.md).
  *
  * "Türkiye ne dedi?" sayıları simüle edilir (soru id'sine göre deterministik).
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import type {
-  ArchiveItem,
-  Crowd,
-  GuessDirection,
-  Me,
-  PlayState,
-  PublicQuestion,
-  QuestionFormat,
-  Stats,
+import {
+  DAILY_MODES,
+  type DailyMode,
+  type DayRank,
+  type DaySet,
+  type GuessDirection,
+  type Me,
+  type ModeSummary,
+  type PlayState,
+  type QuestionFormat,
+  type Stats,
 } from '../api/types';
-import { addBotsToOwnedLeagues, LeagueError, leagueRoute, NOT_HANDLED, type LeagueContext, type MockLeague } from './leagues';
-import { BANK, formatForWeekday, SOURCE_TEXT, type MockQuestion } from './questions';
+import { CELEB, celebScore, compareCeleb, namePattern } from '../lib/celeb';
+import { findCeleb } from './celebs';
+import type { Subscription } from '../lib/premium';
+import { overallPercentile, percentileOf } from '../lib/rank';
+import { simulatedCrowd } from './crowd';
+import { MODE_BANK } from './dailyBank';
+import { freshPractice, NOT_HANDLED, premiumRoute, type MockPractice, type PremiumContext } from './premium';
+import { modeStats, type PlayRecord } from './modeStats';
+import { toPublic } from './publicQuestion';
+import { SOURCE_TEXT, type ResolvedQuestion } from './questions';
+import { artFor } from '../lib/puzzleArt';
 import * as R from './rules';
 
-const STORAGE_KEY = 'gunun.mock.v1';
+const STORAGE_KEY = 'gunun.mock.v2';
 const LAUNCH_DAY = '2026-10-01';
 const ARCHIVE_DAYS = 7;
 const DAY_MS = 86_400_000;
@@ -43,10 +59,13 @@ interface Step {
   round?: number;
   correct?: boolean;
   elapsedMs?: number;
+  /** "Hangi ünlü?" tahmini (listedeki ad). */
+  name?: string;
 }
 
 interface MockPlay {
   day: string;
+  mode: DailyMode;
   archive: boolean;
   steps: Step[];
   hintUsed: boolean;
@@ -62,26 +81,35 @@ interface MockPlay {
 }
 
 interface MockState {
+  /** Anahtar: "gün/mod". */
   plays: Record<string, MockPlay>;
   streak: R.StreakState;
+  /** Tamamlanan yapboz sayısı (eski kayıtlarla uyum; koleksiyonla aynı tutulur). */
+  puzzlesCompleted: number;
+  /** Tamamlanan yapbozların resmi ve günü (koleksiyon). */
+  collection: { art: string; day: string }[];
   me: Me;
-  leagues: MockLeague[];
-  /** Ücretsiz arşiv hakkının kullanıldığı gün ve o gün kullanılan sayı. */
+  /** Ücretsiz arşiv hakkının kullanıldığı gün ve o gün açılan arşiv günü sayısı. */
   archiveFree: { day: string; used: number };
   /** Ödüllü reklamla açılmış arşiv günleri. */
   archiveUnlocked: string[];
   /** Geliştirici aracı: saati gün gün ileri almak için. */
   dayOffset: number;
+  practice: MockPractice;
+  subscription: Subscription | null;
 }
 
 const freshState = (): MockState => ({
   plays: {},
   streak: R.EMPTY_STREAK,
+  puzzlesCompleted: 0,
+  collection: [],
   me: { playerId: 'test-oyuncu', displayName: null, city: null, notifyHour: 9, createdAt: new Date().toISOString() },
-  leagues: [],
   archiveFree: { day: '', used: 0 },
   archiveUnlocked: [],
   dayOffset: 0,
+  practice: freshPractice(),
+  subscription: null,
 });
 
 let state: MockState | null = null;
@@ -91,6 +119,10 @@ async function load(): Promise<MockState> {
   try {
     const raw = await AsyncStorage.getItem(STORAGE_KEY);
     state = raw ? { ...freshState(), ...(JSON.parse(raw) as MockState) } : freshState();
+    // Koleksiyondan önceki kayıtlar: tamamlanan yapbozlar sıradaki resimlerle koleksiyona alınır.
+    if (state.collection.length < state.puzzlesCompleted) {
+      state.collection = Array.from({ length: state.puzzlesCompleted }, (_, i) => state!.collection[i] ?? { art: artFor(i).id, day: today() });
+    }
   } catch {
     state = freshState();
   }
@@ -100,6 +132,10 @@ async function load(): Promise<MockState> {
 async function save() {
   if (state) await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
+
+const playKey = (day: string, mode: DailyMode) => `${day}/${mode}`;
+const playOf = (s: MockState, day: string, mode: DailyMode): MockPlay | undefined => s.plays[playKey(day, mode)];
+const dayPlays = (s: MockState, day: string) => DAILY_MODES.map((m) => playOf(s, day, m));
 
 // --- Zaman ---
 
@@ -120,131 +156,106 @@ function addDays(day: string, n: number): string {
 
 // --- Sorular ---
 
-interface ResolvedQuestion extends MockQuestion {
-  id: number;
-  no: number;
-  day: string;
-}
 
-function questionFor(day: string): ResolvedQuestion {
+const MODE_SEED: Record<DailyMode, number> = { pahali: 0, kac: 1, yapar: 2, unlu: 3 };
+
+/** Her mod kendi stoğunda gün gün ilerler; aynı gün iki modda aynı tema gelmesin diye kaydırılır. */
+function questionFor(day: string, mode: DailyMode): ResolvedQuestion {
   const dn = R.dayNumber(day);
-  const weekday = new Date(Date.parse(`${day}T00:00:00Z`)).getUTCDay();
-  const format = formatForWeekday(weekday);
-  const week = Math.floor(dn / 7);
-  // Pazartesi/Cuma fiyat, Çarşamba/Pazar anket: aynı hafta içinde farklı soru gelsin.
-  const slot = weekday === 5 || weekday === 0 ? 1 : 0;
-  const list = BANK[format];
-  const q = list[(week * 2 + slot) % list.length];
-  return { ...q, id: dn, no: dn - R.dayNumber(LAUNCH_DAY) + 1, day };
+  // Sabit mod numarası (ekran sırası değişse de günün sorusu ve kimliği değişmesin).
+  const mi = MODE_SEED[mode];
+  const list = MODE_BANK[mode];
+  const q = list[(dn + mi * 3) % list.length];
+  return { ...q, id: dn * 10 + mi, no: dn - R.dayNumber(LAUNCH_DAY) + 1, day, mode };
 }
 
-function visibleQuestion(day: string): ResolvedQuestion {
+function parseMode(raw: string): DailyMode {
+  if ((DAILY_MODES as readonly string[]).includes(raw)) return raw as DailyMode;
+  throw new MockError(404, 'mode_not_found', 'Böyle bir oyun yok.');
+}
+
+function checkVisible(day: string) {
   const t = today();
   if (day > t || day < LAUNCH_DAY) {
     throw day === t
-      ? new MockError(404, 'question_not_ready', 'Bugünün sorusu hazırlanıyor. Birazdan tekrar dene.')
-      : new MockError(404, 'question_not_found', 'Bu günün sorusu bulunamadı.');
+      ? new MockError(404, 'question_not_ready', 'Bugünün soruları hazırlanıyor. Birazdan tekrar dene.')
+      : new MockError(404, 'question_not_found', 'Bu günün soruları bulunamadı.');
   }
-  return questionFor(day);
 }
 
-function playableQuestion(day: string): ResolvedQuestion {
+function visibleQuestion(day: string, mode: DailyMode): ResolvedQuestion {
+  checkVisible(day);
+  return questionFor(day, mode);
+}
+
+function playableQuestion(day: string, mode: DailyMode): ResolvedQuestion {
   if (day < addDays(today(), -ARCHIVE_DAYS)) {
     throw new MockError(403, 'archive_expired', `Arşivde yalnızca son ${ARCHIVE_DAYS} günün soruları oynanabilir.`);
   }
-  return visibleQuestion(day);
+  return visibleQuestion(day, mode);
 }
 
-function toPublic(q: ResolvedQuestion): PublicQuestion {
-  const numeric = q.format === 'price' || q.format === 'number';
+
+function celebAnswer(q: ResolvedQuestion) {
+  const c = findCeleb(q.celeb ?? '');
+  if (!c) throw new MockError(500, 'celeb_missing', 'Günün ünlüsü bulunamadı.');
+  return c;
+}
+
+function celebState(q: ResolvedQuestion, p: MockPlay | undefined) {
+  if (q.format !== 'celeb') return null;
+  const answer = celebAnswer(q);
+  const used = p?.steps.length ?? 0;
+  const over = !!p?.finishedAt;
   return {
-    id: q.id,
-    no: q.no,
-    day: q.day,
-    format: q.format,
-    prompt: q.prompt,
-    mediaUrl: null,
-    unit: q.unit ?? null,
-    cancelled: false,
-    maxAttempts: numeric ? R.NUMERIC.maxAttempts : null,
-    hintAfterAttempts: numeric ? R.NUMERIC.hintAfter : null,
-    timeLimitSec: q.format === 'trivia' ? R.TRIVIA.limitMs / 1000 : null,
-    options: q.format === 'poll' ? (q.options ?? null) : null,
-    rounds: q.format === 'compare' ? (q.rounds ?? []).map((r) => ({ prompt: r.prompt ?? null, optionA: r.a, optionB: r.b })) : null,
-    isSponsored: false,
+    maxGuesses: CELEB.maxGuesses,
+    hints: {
+      fact: over || used >= CELEB.hintFactAfter ? answer.fact : null,
+      pattern: over || used >= CELEB.hintPatternAfter ? namePattern(answer.name) : null,
+      factAfter: CELEB.hintFactAfter,
+      patternAfter: CELEB.hintPatternAfter,
+    },
+    guesses: (p?.steps ?? []).map((x) => compareCeleb(findCeleb(x.name!)!, answer)),
+    answer: p?.finishedAt ? compareCeleb(answer, answer) : null,
   };
-}
-
-// --- Simüle "Türkiye ne dedi?" ---
-
-function simulatedCrowd(q: ResolvedQuestion, mine: MockPlay | undefined): Crowd {
-  const rnd = R.mulberry32(q.id * 7919);
-  const plays = 2000 + Math.floor(rnd() * 7000) + (mine?.finishedAt ? 1 : 0);
-  const avg = Math.round((40 + rnd() * 30) * 10) / 10;
-  const histogram = Array.from({ length: 10 }, (_, i) => {
-    const center = avg / 10;
-    return Math.round(plays * Math.exp(-((i - center) ** 2) / 6) * 0.12);
-  });
-  const crowd: Crowd = {
-    questionId: q.id,
-    plays,
-    avgScore: avg,
-    histogram,
-    solvedPct: Math.round((40 + rnd() * 40) * 10) / 10,
-    underPct: null,
-    overPct: null,
-    optionPcts: null,
-    final: q.day < today(),
-    updatedAt: new Date(mockNow()).toISOString(),
-  };
-
-  if (q.format === 'price' || q.format === 'number') {
-    const under = Math.round((30 + rnd() * 40) * 10) / 10;
-    crowd.underPct = under;
-    crowd.overPct = Math.round((100 - under - 3) * 10) / 10;
-  } else if (q.format === 'trivia') {
-    const correctPct = 45 + rnd() * 30;
-    const weights = (q.options ?? []).map((_, i) => (i === q.correctOption ? correctPct : 5 + rnd() * 20));
-    crowd.optionPcts = R.pollPercentages(weights.map((w) => Math.round(w * 10)));
-    crowd.solvedPct = Math.round(crowd.optionPcts[q.correctOption ?? 0] * 0.95 * 10) / 10;
-  } else if (q.format === 'poll') {
-    const weights = (q.pollWeights ?? (q.options ?? []).map(() => 1)).map((w) => Math.max(1, w + (rnd() - 0.5) * 8));
-    crowd.optionPcts = R.pollPercentages(weights.map((w) => Math.round(w * plays)));
-    crowd.solvedPct = null;
-  }
-  return crowd;
 }
 
 // --- Oyun durumu ---
+
+/** Günün bütün modları bitti mi (bugün oynanmış, arşiv değil)? */
+function dayComplete(s: MockState, day: string): boolean {
+  return dayPlays(s, day).every((p) => !!p?.finishedAt && !p.archive);
+}
 
 function finish(q: ResolvedQuestion, p: MockPlay, score: number | null, solved: boolean, s: MockState) {
   p.score = score;
   p.solved = solved;
   p.finishedAt = mockNow();
-  if (!p.archive) s.streak = R.recordPlay(s.streak, q.day);
+  if (p.archive || !dayComplete(s, q.day)) return;
+  const before = s.streak.current;
+  s.streak = R.recordPlay(s.streak, q.day);
+  if (s.streak.current !== before && R.completesPuzzle(s.streak.current)) completePuzzle(s, q.day);
+}
+
+/** Yapboz bitti: resmi koleksiyona girer; bir sonraki yapboz sıradaki resimle başlar. */
+function completePuzzle(s: MockState, day: string) {
+  s.collection = [...s.collection, { art: artFor(s.collection.length).id, day }];
+  s.puzzlesCompleted = s.collection.length;
 }
 
 /** Anket günü bittiyse bekleyen puanı simüle sonuca göre kesinleştirir. */
 function settlePoll(q: ResolvedQuestion, p: MockPlay) {
   if (q.format !== 'poll' || !p.poll || p.score !== null || q.day >= today()) return false;
-  const actual = simulatedCrowd(q, p).optionPcts?.[p.poll.option] ?? 0;
+  const actual = simulatedCrowd(q, true, today(), mockNow()).optionPcts?.[p.poll.option] ?? 0;
   p.poll.actualPct = actual;
   p.score = R.pollScore(p.poll.predictedPct, actual);
   p.solved = p.score >= R.POLL_SOLVED_SCORE;
   return true;
 }
 
-function settleTrivia(q: ResolvedQuestion, p: MockPlay) {
-  if (q.format !== 'trivia' || p.finishedAt || !R.triviaTimedOut(mockNow() - p.startedAt)) return false;
-  p.score = 0;
-  p.solved = false;
-  p.finishedAt = p.startedAt + R.TRIVIA.limitMs + R.TRIVIA.graceMs;
-  return true;
-}
-
 /**
  * 6 hak bitmiş, oyuncu ek tahmin ile "cevabı göster" arasında seçim yapmadan gün geçtiyse
- * oyun son tahmine göre kapanır (bekleyen soru seriyi ve ligi askıda bırakmasın).
+ * oyun son tahmine göre kapanır (bekleyen soru seriyi askıda bırakmasın).
  * Ölçü sorunun günü değil oyunun başladığı gündür: arşiv sorusunun günü zaten geçmiştir.
  */
 function settleNumeric(q: ResolvedQuestion, p: MockPlay, s: MockState) {
@@ -263,8 +274,9 @@ function revealNumeric(q: ResolvedQuestion, p: MockPlay, s: MockState) {
   finish(q, p, R.numericScore(p.steps.length, false, last.value!, q.answer!, p.hintUsed), false, s);
 }
 
-function settleAll(q: ResolvedQuestion, p: MockPlay, s: MockState) {
-  settleTrivia(q, p);
+function settle(s: MockState, q: ResolvedQuestion) {
+  const p = playOf(s, q.day, q.mode);
+  if (!p) return;
   settlePoll(q, p);
   settleNumeric(q, p, s);
 }
@@ -272,7 +284,7 @@ function settleAll(q: ResolvedQuestion, p: MockPlay, s: MockState) {
 function archiveAccess(s: MockState, day: string): R.ArchiveAccess | null {
   if (day >= today()) return null;
   const freeUsed = s.archiveFree.day === today() ? s.archiveFree.used : 0;
-  return R.archiveAccess(!!s.plays[day], s.archiveUnlocked.includes(day), freeUsed);
+  return R.archiveAccess(dayPlays(s, day).some(Boolean), s.archiveUnlocked.includes(day), freeUsed);
 }
 
 function buildState(q: ResolvedQuestion, p: MockPlay | undefined, s: MockState): PlayState {
@@ -283,6 +295,7 @@ function buildState(q: ResolvedQuestion, p: MockPlay | undefined, s: MockState):
     questionId: q.id,
     no: q.no,
     day: q.day,
+    mode: q.mode,
     format: q.format,
     started: !!p,
     archive: p?.archive ?? q.day < today(),
@@ -295,7 +308,7 @@ function buildState(q: ResolvedQuestion, p: MockPlay | undefined, s: MockState):
       ? {
           attemptsUsed: steps.length,
           maxAttempts: R.numericMaxAttempts(!!p?.extraGuess),
-          guesses: steps.map((s) => ({ value: s.value!, direction: s.direction!, close: !!s.close })),
+          guesses: steps.map((x) => ({ value: x.value!, direction: x.direction!, close: !!x.close })),
           hintUsed: !!p?.hintUsed,
           canUseHint: !!p && R.canUseHint(steps.length, finished, p.hintUsed),
           hintAfterAttempts: R.NUMERIC.hintAfter,
@@ -304,35 +317,25 @@ function buildState(q: ResolvedQuestion, p: MockPlay | undefined, s: MockState):
           extraGuessUsed: !!p?.extraGuess,
         }
       : null,
-    trivia:
-      q.format === 'trivia' && p
-        ? {
-            options: q.options ?? [],
-            timeLimitSec: R.TRIVIA.limitMs / 1000,
-            startedAt: new Date(p.startedAt).toISOString(),
-            deadline: new Date(p.startedAt + R.TRIVIA.limitMs).toISOString(),
-            chosenOption: p.chosenOption,
-            elapsedMs: steps[0]?.elapsedMs ?? null,
-            timedOut: finished && p.chosenOption === null,
-          }
-        : null,
+    trivia: null,
     compare:
       q.format === 'compare'
         ? {
             rounds: R.COMPARE_ROUNDS,
-            answered: steps.map((s) => {
-              const r = q.rounds![s.round!];
-              return { round: s.round!, choice: s.option!, correct: !!s.correct, correctChoice: r.correct, valueA: r.valueA, valueB: r.valueB };
+            answered: steps.map((x) => {
+              const r = q.rounds![x.round!];
+              return { round: x.round!, choice: x.option!, correct: !!x.correct, correctChoice: r.correct, valueA: r.valueA, valueB: r.valueB };
             }),
           }
         : null,
     poll: q.format === 'poll' && p?.poll ? { ...p.poll } : null,
+    celeb: celebState(q, p),
     reveal: finished
       ? {
           answer: numeric ? (q.answer ?? null) : null,
           unit: q.unit ?? null,
-          correctOption: q.format === 'trivia' ? (q.correctOption ?? null) : null,
-          factText: q.fact ?? null,
+          correctOption: null,
+          factText: q.format === 'celeb' ? celebAnswer(q).fact : (q.fact ?? null),
           priceHistory: q.priceHistory ?? null,
           sourceText: SOURCE_TEXT,
           sourceUrl: null,
@@ -343,19 +346,91 @@ function buildState(q: ResolvedQuestion, p: MockPlay | undefined, s: MockState):
   };
 }
 
+/** Hub kartındaki kısa sonuç: "3/5", "4/6", "X/6", "%72". */
+function resultLabel(q: ResolvedQuestion, p: MockPlay | undefined): string | null {
+  if (!p?.finishedAt) return null;
+  if (q.format === 'compare') return `${p.steps.filter((x) => x.correct).length}/${R.COMPARE_ROUNDS}`;
+  if (q.format === 'poll') return p.poll ? `%${p.poll.predictedPct}` : null;
+  if (q.format === 'celeb') return `${p.solved ? p.steps.length : 'X'}/${CELEB.maxGuesses}`;
+  const max = R.numericMaxAttempts(!!p.extraGuess);
+  return p.solved ? `${p.steps.length}/${max}` : `X/${max}`;
+}
+
+const SQUARE = { higher: '🟧', lower: '🟦', close: '🟥', correct: '🟩', miss: '⬛' } as const;
+
+/** Paylaşım kareleri: Hangisi pahalı? turları ve Kaç? tahminleri (lib/share.ts ile aynı renkler). */
+function squaresOf(q: ResolvedQuestion, p: MockPlay | undefined): string | null {
+  if (!p?.finishedAt || q.format === 'poll') return null;
+  if (q.format === 'compare') return p.steps.map((x) => (x.correct ? SQUARE.correct : SQUARE.miss)).join('');
+  if (q.format === 'celeb') return celebSquares(q, p);
+  return p.steps.map((x) => (x.direction === 'correct' ? SQUARE.correct : x.close ? SQUARE.close : SQUARE[x.direction!])).join('');
+}
+
+/**
+ * "Hangi ünlü?" paylaşımı: her tahmin bir kare. Yeşil = bulundu, turuncu = 8 kutunun en az 4'ü
+ * yeşil/turuncu (yaklaştı), kırmızı = uzak. Kimin tahmin edildiğini vermez.
+ */
+function celebSquares(q: ResolvedQuestion, p: MockPlay): string {
+  const answer = celebAnswer(q);
+  return p.steps
+    .map((x) => {
+      const g = compareCeleb(findCeleb(x.name!)!, answer);
+      if (g.correct) return SQUARE.correct;
+      return g.cells.filter((c) => c.status !== 'wrong').length >= 4 ? SQUARE.higher : SQUARE.close;
+    })
+    .join('');
+}
+
+function modeSummary(s: MockState, day: string, mode: DailyMode): ModeSummary {
+  const q = questionFor(day, mode);
+  settle(s, q);
+  const p = playOf(s, day, mode);
+  const finished = !!p?.finishedAt;
+  return {
+    mode,
+    format: q.format,
+    teaser: q.format === 'compare' ? `${q.rounds?.[0]?.a} mı, ${q.rounds?.[0]?.b} mı?` : q.format === 'celeb' ? `Günün ünlüsünü ${CELEB.maxGuesses} tahminde bul` : q.prompt,
+    started: !!p,
+    finished,
+    score: p?.score ?? null,
+    scorePending: finished && p?.score == null,
+    solved: !!p?.solved,
+    result: resultLabel(q, p),
+    squares: squaresOf(q, p),
+  };
+}
+
+function daySet(s: MockState, day: string): DaySet {
+  checkVisible(day);
+  const modes = DAILY_MODES.map((m) => modeSummary(s, day, m));
+  const finishedCount = modes.filter((m) => m.finished).length;
+  return {
+    day,
+    no: questionFor(day, 'kac').no,
+    archive: day < today(),
+    modes,
+    finishedCount,
+    complete: finishedCount === modes.length,
+    locked: archiveAccess(s, day) === 'locked',
+  };
+}
+
 function getOrCreate(s: MockState, q: ResolvedQuestion): MockPlay {
-  if (!s.plays[q.day]) {
+  const key = playKey(q.day, q.mode);
+  if (!s.plays[key]) {
     const access = archiveAccess(s, q.day);
     if (access === 'locked') {
-      throw new MockError(403, 'archive_locked', 'Bugünkü ücretsiz arşiv hakkını kullandın. Bu soruyu kısa bir videoyla açabilirsin.');
+      throw new MockError(403, 'archive_locked', 'Bugünkü ücretsiz arşiv hakkını kullandın. Bu günü kısa bir videoyla açabilirsin.');
     }
+    // Ücretsiz hak gün başına bir kez düşer (aynı günün diğer modları bedava).
     if (access === 'free') {
       const t = today();
       s.archiveFree = { day: t, used: (s.archiveFree.day === t ? s.archiveFree.used : 0) + 1 };
     }
   }
-  return (s.plays[q.day] ??= {
+  return (s.plays[key] ??= {
     day: q.day,
+    mode: q.mode,
     archive: q.day < today(),
     steps: [],
     hintUsed: false,
@@ -370,11 +445,11 @@ function getOrCreate(s: MockState, q: ResolvedQuestion): MockPlay {
 }
 
 function ensureNotFinished(p: MockPlay) {
-  if (p.finishedAt) throw new MockError(409, 'already_finished', 'Bu soruyu zaten bitirdin.');
+  if (p.finishedAt) throw new MockError(409, 'already_finished', 'Bu oyunu zaten bitirdin.');
 }
 
 function wrongFormat(): MockError {
-  return new MockError(400, 'wrong_format', 'Bu işlem bugünkü soru türüne uygun değil.');
+  return new MockError(400, 'wrong_format', 'Bu işlem bu oyun türüne uygun değil.');
 }
 
 // --- Yönlendirme ---
@@ -387,24 +462,15 @@ export async function mockApi<T>(method: string, path: string, body?: unknown): 
   // Ağ gecikmesi hissi; yükleniyor durumları da görünsün.
   await new Promise((r) => setTimeout(r, 120));
   const [pathname, search = ''] = path.split('?');
-  let result: unknown;
-  try {
-    result = route(s, method, pathname, new URLSearchParams(search), b);
-  } catch (e) {
-    if (e instanceof LeagueError) throw new MockError(e.status, e.code, e.message);
-    throw e;
-  }
+  const result = route(s, method, pathname, new URLSearchParams(search), b);
   await save();
   return result as T;
 }
 
+const DAY = '(\\d{4}-\\d{2}-\\d{2})';
+
 function route(s: MockState, method: string, path: string, query: URLSearchParams, b: Body): unknown {
   let m: RegExpMatchArray | null;
-
-  if (path.startsWith('/leagues')) {
-    const result = leagueRoute(leagueContext(s), method, path, query, b);
-    if (result !== NOT_HANDLED) return result;
-  }
 
   if (method === 'POST' && path === '/auth/device') return { token: 'mock', playerId: s.me.playerId, isNew: false };
   if (path === '/me') {
@@ -415,13 +481,19 @@ function route(s: MockState, method: string, path: string, query: URLSearchParam
     }
     return s.me;
   }
-  if (method === 'GET' && path === '/q/today') return toPublic(visibleQuestion(today()));
-  if (method === 'GET' && (m = path.match(/^\/q\/(\d{4}-\d{2}-\d{2})$/))) return toPublic(visibleQuestion(m[1]));
-  if (method === 'GET' && (m = path.match(/^\/q\/(\d{4}-\d{2}-\d{2})\/crowd$/))) {
-    const q = visibleQuestion(m[1]);
-    const mine = s.plays[q.day];
-    if (q.day === today() && !mine?.finishedAt) throw new MockError(403, 'finish_first', 'Sonuçları görmek için önce soruyu bitir.');
-    return simulatedCrowd(q, mine);
+  const extra = premiumRoute(premiumContext(s), method, path, b);
+  if (extra !== NOT_HANDLED) return extra;
+
+  if (method === 'GET' && path === '/days/today') return daySet(s, today());
+  if (method === 'GET' && (m = path.match(new RegExp(`^/days/${DAY}/rank$`)))) return dayRank(s, m[1]);
+  if (method === 'GET' && (m = path.match(new RegExp(`^/days/${DAY}$`)))) return daySet(s, m[1]);
+  if (method === 'POST' && (m = path.match(new RegExp(`^/days/${DAY}/unlock$`)))) return unlockDay(s, m[1]);
+  if (method === 'GET' && (m = path.match(new RegExp(`^/q/${DAY}/(\\w+)$`)))) return toPublic(visibleQuestion(m[1], parseMode(m[2])));
+  if (method === 'GET' && (m = path.match(new RegExp(`^/q/${DAY}/(\\w+)/crowd$`)))) {
+    const q = visibleQuestion(m[1], parseMode(m[2]));
+    const mine = playOf(s, q.day, q.mode);
+    if (q.day === today() && !mine?.finishedAt) throw new MockError(403, 'finish_first', 'Sonuçları görmek için önce oyunu bitir.');
+    return simulatedCrowd(q, !!mine?.finishedAt, today(), mockNow());
   }
   if (method === 'GET' && path === '/plays/archive') return archive(s);
   if (method === 'GET' && path === '/stats/me') return stats(s);
@@ -433,30 +505,65 @@ function route(s: MockState, method: string, path: string, query: URLSearchParam
     return {};
   }
 
-  if ((m = path.match(/^\/plays\/(\d{4}-\d{2}-\d{2})(?:\/(\w+))?$/))) {
-    const [, day, action] = m;
+  if ((m = path.match(new RegExp(`^/plays/${DAY}/(\\w+)(?:/(\\w+))?$`)))) {
+    const [, day, rawMode, action] = m;
+    const mode = parseMode(rawMode);
     if (method === 'GET' && !action) {
-      const q = visibleQuestion(day);
-      const p = s.plays[day];
-      if (p) settleAll(q, p, s);
-      return buildState(q, p, s);
+      const q = visibleQuestion(day, mode);
+      settle(s, q);
+      return buildState(q, playOf(s, day, mode), s);
     }
-    return playAction(s, playableQuestion(day), action, b);
+    return playAction(s, playableQuestion(day, mode), action, b);
   }
 
   throw new MockError(404, 'not_found', 'Aradığın şey bulunamadı.');
 }
 
+function premiumContext(s: MockState): PremiumContext {
+  const pahali = playOf(s, today(), 'pahali');
+  return {
+    practice: s.practice,
+    subscription: s.subscription,
+    setSubscription: (sub) => (s.subscription = sub),
+    today: today(),
+    now: mockNow(),
+    pahaliFinishedToday: !!pahali?.finishedAt && !pahali.archive,
+    fail: (status, code, message) => new MockError(status, code, message),
+  };
+}
+
+/** Gün bitince her modda oyuncuların yüzde kaçından iyi olduğun (anket puanı gün bitince belli olur). */
+function dayRank(s: MockState, day: string): DayRank {
+  checkVisible(day);
+  if (!dayComplete(s, day)) throw new MockError(403, 'finish_first', 'Sıralamayı görmek için günün 4 oyununu bitir.');
+  let players = 0;
+  const modes = DAILY_MODES.map((mode) => {
+    const q = questionFor(day, mode);
+    settle(s, q);
+    const score = playOf(s, day, mode)?.score ?? null;
+    const crowd = simulatedCrowd(q, true, today(), mockNow());
+    players = Math.max(players, crowd.plays);
+    return { mode, percentile: score === null ? null : percentileOf(crowd.histogram, score), pending: score === null };
+  });
+  return { day, overall: overallPercentile(modes.map((x) => x.percentile)), players, modes };
+}
+
+/** Arşiv günü ödüllü reklamla açıldı (gerçek sunucuda AdMob SSV ile doğrulanacak). */
+function unlockDay(s: MockState, day: string): DaySet {
+  if (day >= today()) throw new MockError(400, 'not_archive', 'Bu gün arşivde değil.');
+  if (!s.archiveUnlocked.includes(day)) s.archiveUnlocked.push(day);
+  const oldest = addDays(today(), -ARCHIVE_DAYS);
+  s.archiveUnlocked = s.archiveUnlocked.filter((d) => d >= oldest);
+  return daySet(s, day);
+}
+
 function playAction(s: MockState, q: ResolvedQuestion, action: string | undefined, b: Body): PlayState {
   const numeric = q.format === 'price' || q.format === 'number';
+  const existing = () => playOf(s, q.day, q.mode);
 
   switch (action) {
-    case 'start': {
-      const p = getOrCreate(s, q);
-      if (q.format === 'trivia' && !p.archive) s.streak = R.recordPlay(s.streak, q.day);
-      settleTrivia(q, p);
-      return buildState(q, p, s);
-    }
+    case 'start':
+      return buildState(q, getOrCreate(s, q), s);
     case 'guess': {
       if (!numeric) throw wrongFormat();
       const raw = Number(b?.value);
@@ -481,54 +588,36 @@ function playAction(s: MockState, q: ResolvedQuestion, action: string | undefine
     case 'extra': {
       // Ödüllü reklam izlendi (gerçek sunucuda AdMob SSV ile doğrulanacak).
       if (!numeric) throw wrongFormat();
-      const p = s.plays[q.day];
+      const p = existing();
       if (!p || !isAwaitingExtra(q, p)) throw new MockError(409, 'extra_unavailable', 'Ek tahmin şu an alınamaz.');
       p.extraGuess = true;
       return buildState(q, p, s);
     }
     case 'reveal': {
       if (!numeric) throw wrongFormat();
-      const p = s.plays[q.day];
+      const p = existing();
       if (!p || !isAwaitingExtra(q, p)) throw new MockError(409, 'reveal_unavailable', 'Cevap şu an açılamaz.');
       revealNumeric(q, p, s);
       return buildState(q, p, s);
     }
-    case 'unlock': {
-      // Arşiv günü ödüllü reklamla açıldı.
-      if (q.day >= today()) throw new MockError(400, 'not_archive', 'Bu soru arşivde değil.');
-      if (!s.archiveUnlocked.includes(q.day)) s.archiveUnlocked.push(q.day);
-      const oldest = addDays(today(), -ARCHIVE_DAYS);
-      s.archiveUnlocked = s.archiveUnlocked.filter((d) => d >= oldest);
-      return buildState(q, s.plays[q.day], s);
-    }
+    case 'unlock':
+      unlockDay(s, q.day);
+      return buildState(q, existing(), s);
     case 'hint': {
       if (!numeric) throw wrongFormat();
-      const p = s.plays[q.day];
-      if (!p) throw new MockError(409, 'not_started', 'Önce soruyu aç.');
+      const p = existing();
+      if (!p) throw new MockError(409, 'not_started', 'Önce oyunu aç.');
       ensureNotFinished(p);
       if (p.hintUsed) throw new MockError(409, 'hint_already_used', 'İpucunu zaten kullandın.');
       if (!R.canUseHint(p.steps.length, false, false)) {
         throw new MockError(409, 'hint_unavailable', `İpucu ${R.NUMERIC.hintAfter}. tahminden sonra açılır.`);
       }
       p.hintUsed = true;
-      p.hint = R.buildHint(q.answer!, q.id, p.steps.map((x) => ({ value: x.value!, direction: x.direction! })));
-      return buildState(q, p, s);
-    }
-    case 'answer': {
-      if (q.format !== 'trivia') throw wrongFormat();
-      const option = Number(b?.option);
-      if (!Number.isInteger(option) || option < 0 || option >= (q.options?.length ?? 0)) {
-        throw new MockError(400, 'invalid_option', 'Geçersiz şık.');
-      }
-      const p = s.plays[q.day];
-      if (!p) throw new MockError(409, 'not_started', 'Önce soruyu aç.');
-      if (settleTrivia(q, p)) return buildState(q, p, s);
-      ensureNotFinished(p);
-      const elapsedMs = mockNow() - p.startedAt;
-      const correct = option === q.correctOption;
-      p.steps.push({ option, correct, elapsedMs });
-      p.chosenOption = option;
-      finish(q, p, R.triviaScore(correct, elapsedMs), correct, s);
+      p.hint = R.buildHint(
+        q.answer!,
+        q.id,
+        p.steps.map((x) => ({ value: x.value!, direction: x.direction! })),
+      );
       return buildState(q, p, s);
     }
     case 'compare': {
@@ -546,6 +635,18 @@ function playAction(s: MockState, q: ResolvedQuestion, action: string | undefine
       }
       return buildState(q, p, s);
     }
+    case 'celeb': {
+      if (q.format !== 'celeb') throw wrongFormat();
+      const guess = findCeleb(typeof b?.name === 'string' ? b.name : '');
+      if (!guess) throw new MockError(400, 'unknown_celeb', 'Bu ünlü listede yok. Önerilerden birini seç.');
+      const p = getOrCreate(s, q);
+      ensureNotFinished(p);
+      if (p.steps.some((x) => x.name === guess.name)) throw new MockError(409, 'already_guessed', 'Bu ünlüyü zaten denedin.');
+      p.steps.push({ name: guess.name });
+      const solved = guess.name === celebAnswer(q).name;
+      if (solved || p.steps.length >= CELEB.maxGuesses) finish(q, p, celebScore(p.steps.length, solved), solved, s);
+      return buildState(q, p, s);
+    }
     case 'poll': {
       if (q.format !== 'poll') throw wrongFormat();
       const option = Number(b?.option);
@@ -557,7 +658,7 @@ function playAction(s: MockState, q: ResolvedQuestion, action: string | undefine
         throw new MockError(400, 'invalid_prediction', 'Tahmin 0 ile 100 arasında olmalı.');
       }
       const p = getOrCreate(s, q);
-      if (p.finishedAt) throw new MockError(409, 'already_voted', 'Bu ankete zaten oy verdin.');
+      if (p.finishedAt) throw new MockError(409, 'already_voted', 'Bu soruya zaten cevap verdin.');
       p.steps.push({ option, value: predicted });
       p.chosenOption = option;
       p.poll = { option, predictedPct: predicted, actualPct: null };
@@ -569,68 +670,64 @@ function playAction(s: MockState, q: ResolvedQuestion, action: string | undefine
   throw new MockError(404, 'not_found', 'Aradığın şey bulunamadı.');
 }
 
-function leagueContext(s: MockState): LeagueContext {
-  return {
-    leagues: s.leagues,
-    me: { id: s.me.playerId, name: s.me.displayName },
-    today: today(),
-    now: mockNow(),
-    launchDay: LAUNCH_DAY,
-    formatOf: (day) => questionFor(day).format,
-    myCell: (day) => {
-      const p = s.plays[day];
-      if (!p || p.archive || day > today() || day < LAUNCH_DAY) return { played: false, score: null };
-      settleAll(questionFor(day), p, s);
-      return p.finishedAt ? { played: true, score: p.score } : { played: false, score: null };
-    },
-  };
-}
-
-function archive(s: MockState): ArchiveItem[] {
+/** Son 7 günün setleri (yeniden eskiye). */
+function archive(s: MockState): DaySet[] {
   const t = today();
-  const items: ArchiveItem[] = [];
+  const items: DaySet[] = [];
   for (let i = 1; i <= ARCHIVE_DAYS; i++) {
     const day = addDays(t, -i);
     if (day < LAUNCH_DAY) break;
-    const q = questionFor(day);
-    const p = s.plays[day];
-    if (p) settleAll(q, p, s);
-    items.push({
-      day,
-      no: q.no,
-      format: q.format,
-      prompt: q.prompt,
-      cancelled: false,
-      started: !!p,
-      finished: !!p?.finishedAt,
-      score: p?.score ?? null,
-      playedFromArchive: !!p?.archive,
-      locked: archiveAccess(s, day) === 'locked',
-    });
+    items.push(daySet(s, day));
   }
   return items;
 }
 
-function stats(s: MockState): Stats {
-  const t = today();
-  const rows = Object.values(s.plays)
+/** Bitmiş, arşiv dışı oyunlar ve soruları (anket ve bekleyen sayı puanları kesinleştirilir). */
+function finishedRows(s: MockState) {
+  return Object.values(s.plays)
     .filter((p) => !p.archive)
     .map((p) => {
-      const q = questionFor(p.day);
-      settleAll(q, p, s);
+      const q = questionFor(p.day, p.mode);
+      settle(s, q);
       return { p, q };
     })
     .filter(({ p }) => p.finishedAt);
+}
+
+function playRecord(p: MockPlay): PlayRecord {
+  return {
+    mode: p.mode,
+    finishedAt: p.finishedAt ?? 0,
+    score: p.score,
+    solved: p.solved,
+    attempts: p.steps.length,
+    correctRounds: p.steps.filter((x) => x.correct).length,
+  };
+}
+
+function stats(s: MockState): Stats {
+  const t = today();
+  const rows = finishedRows(s);
 
   const scored = rows.filter(({ p }) => p.score !== null);
   const avg = (xs: number[]) => (xs.length ? Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 10) / 10 : null);
   const formats = [...new Set(rows.map(({ q }) => q.format))] as QuestionFormat[];
+  const current = R.effectiveStreak(s.streak, t);
 
   return {
-    currentStreak: R.effectiveStreak(s.streak, t),
+    currentStreak: current,
     maxStreak: s.streak.max,
     canRepairStreak: R.canRepair(s.streak, t),
     playedToday: s.streak.lastPlayedDay === t,
+    puzzle: {
+      size: R.PUZZLE_SIZE,
+      pieces: R.puzzlePieces(current),
+      earnedToday: s.streak.lastPlayedDay === t && current > 0,
+      completed: s.collection.length,
+      // Yapboz bugün tamamlandıysa dolu hâliyle o resim kalır; yarın sıradaki resim başlar.
+      art: R.puzzlePieces(current) === R.PUZZLE_SIZE && s.collection.length ? s.collection[s.collection.length - 1].art : artFor(s.collection.length).id,
+    },
+    collection: [...s.collection],
     played: rows.length,
     solved: rows.filter(({ p }) => p.solved).length,
     avgScore: avg(scored.map(({ p }) => p.score!)),
@@ -645,6 +742,7 @@ function stats(s: MockState): Stats {
         avgScore: avg(fr.filter(({ p }) => p.score !== null).map(({ p }) => p.score!)),
       };
     }),
+    byMode: modeStats(rows.map(({ p }) => playRecord(p))),
     recent: rows
       .sort((a, b) => (a.q.day < b.q.day ? 1 : -1))
       .slice(0, 30)
@@ -665,12 +763,11 @@ export async function mockReset() {
   await save();
 }
 
-/** Kendi kurduğun liglere test oyuncusu ekler. Eklenen oyuncu sayısı. */
-export async function mockAddLeagueBots(): Promise<number> {
+/** Geliştirici aracı: koleksiyona sıradaki resmi tamamlanmış olarak ekler (15 gün oynamadan denemek için). */
+export async function mockCompletePuzzle() {
   const s = await load();
-  const added = addBotsToOwnedLeagues(s.leagues, s.me.playerId, mockNow());
+  completePuzzle(s, today());
   await save();
-  return added;
 }
 
 export async function mockDayOffset(): Promise<number> {

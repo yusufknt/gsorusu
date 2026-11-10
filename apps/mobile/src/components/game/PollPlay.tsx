@@ -15,7 +15,7 @@ import { useFormatStyle } from './formatStyle';
 
 /**
  * Türkiye ne diyor?: önce oy, sonra "oyuncuların yüzde kaçı senin gibi dedi?" tahmini.
- * Puan gün bitince kesinleşir; seri oy anında sayılır.
+ * Puan gün bitince kesinleşir; oy verince mod biter (günün seti için sayılır).
  */
 export function PollPlay({
   question,
@@ -108,7 +108,7 @@ export function PollPlay({
             <Row style={{ gap: space.sm, alignItems: 'flex-start' }}>
               <Icon name="information-circle-outline" size={18} color={c.textMuted} />
               <T variant="caption" color="textMuted" style={{ flex: 1 }}>
-                Gerçeğe ne kadar yakınsan o kadar çok puan: 100 − 2 × fark. Sonuç gece yarısı kesinleşir; serin şimdiden sayılır.
+                Gerçeğe ne kadar yakınsan o kadar çok puan: 100 − 2 × fark. Sonuç gece yarısı kesinleşir; bu soru şimdiden bitmiş sayılır.
               </T>
             </Row>
           </Card>

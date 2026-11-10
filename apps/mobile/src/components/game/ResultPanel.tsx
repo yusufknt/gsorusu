@@ -1,67 +1,41 @@
-import * as Clipboard from 'expo-clipboard';
-import { router } from 'expo-router';
-import { useRef, useState } from 'react';
-import { Share, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import type { ViewShotRef } from 'react-native-view-shot';
 
-import { useCrowd, useLeagues } from '@/api/hooks';
-import type { Crowd, PlayState, PublicQuestion } from '@/api/types';
-import { Bar, Button, Card, Chip, Icon, PressableScale, Row, T, useToast } from '@/components/ui';
-import { formatAmount, formatCountdown, formatMonthYear, formatTrNumber, nextResetMs, pct, pctOf } from '@/lib/format';
-import { useHaptics } from '@/lib/haptics';
-import { ensureNotificationPermission } from '@/lib/reminders';
-import { shareParts, shareText } from '@/lib/share';
-import { useSettings } from '@/settings/settings';
+import { useCrowd } from '@/api/hooks';
+import type { Crowd, DailyMode, PlayState, PublicQuestion } from '@/api/types';
+import type { SoroMood } from '@/components/mascot/SoroFigure';
+import { SoroSays } from '@/components/mascot/SoroSays';
+import { Bar, Card, Chip, Icon, Row, T } from '@/components/ui';
+import { formatAmount, formatTrNumber, pct, pctOf } from '@/lib/format';
 import { font, fonts, radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/useTheme';
 
+import { PriceHistoryChart } from './PriceHistoryChart';
 import { ScoreRing } from './ScoreRing';
-import { ShareCard, shareCardImage } from './ShareCard';
-import { useNow } from './useNow';
 
-/** Sonuç: puan, paylaş (üst yarıda, plan A5), cevap, Biliyor muydun?, Türkiye ne dedi?, sonraki soru. */
-export function ResultPanel({
-  question,
-  play,
-  streak,
-  isToday,
-  onNextDay,
-}: {
-  question: PublicQuestion;
-  play: PlayState;
-  streak: number;
-  /** false: Arşiv sekmesinden açılan geçmiş gün (kendi gününde oynanmış olsa bile). */
-  isToday: boolean;
-  onNextDay?: () => void;
-}) {
+const SQUARE = { higher: '🟧', lower: '🟦', close: '🟥', correct: '🟩', miss: '⬛' } as const;
+
+/** Tahmin/tur kareleri (paylaşımdakiyle aynı renkler; cevabı vermez). */
+function squaresOf(play: PlayState): string | null {
+  if (play.compare) return play.compare.answered.map((r) => (r.correct ? SQUARE.correct : SQUARE.miss)).join('');
+  if (play.numeric) {
+    const s = play.numeric.guesses.map((g) => (g.direction === 'correct' ? SQUARE.correct : g.close ? SQUARE.close : SQUARE[g.direction])).join('');
+    return play.numeric.hintUsed ? `${s} · ipuçlu` : s;
+  }
+  return null;
+}
+
+/** Modun sonucu: puan ve kareler, cevap, Biliyor muydun?, Türkiye ne dedi?. Paylaşım günün merkezinde. */
+export function ResultPanel({ question, play, mode, streak }: { question: PublicQuestion; play: PlayState; mode: DailyMode; streak: number }) {
   const c = useColors();
-  const toast = useToast();
-  const buzz = useHaptics();
-  const crowd = useCrowd(question.day, true);
-  const cardRef = useRef<ViewShotRef>(null);
-  const [sharingImage, setSharingImage] = useState(false);
-  const text = shareText(play, streak);
-  const { squares } = shareParts(play);
-
-  const shareImage = async () => {
-    setSharingImage(true);
-    try {
-      await shareCardImage(cardRef.current);
-    } catch {
-      toast('Görsel hazırlanamadı, metin olarak paylaşmayı dene');
-    } finally {
-      setSharingImage(false);
-    }
-  };
+  const crowd = useCrowd(question.day, mode, true);
+  const squares = squaresOf(play);
 
   return (
     <View style={{ gap: space.lg }}>
       <Animated.View entering={FadeInDown.springify().damping(16)}>
         <Card style={{ alignItems: 'center', gap: space.md, paddingVertical: space.xl }}>
-          <T variant="title" center>
-            {headline(play, question)}
-          </T>
+          <SoroSays mood={resultMood(play, question)} text={headline(play, question)} size={84} />
           {play.scorePending ? (
             <View style={[styles.pending, { backgroundColor: c.surfaceMuted }]}>
               <Icon name="hourglass-outline" size={36} color={c.textMuted} />
@@ -81,81 +55,25 @@ export function ResultPanel({
             </Text>
           )}
           {!play.archive && streak > 0 && <Chip label={`${streak} günlük seri`} icon="flame" color={c.flame} bg={c.accentSoft} />}
-
-          <View style={{ alignSelf: 'stretch', gap: space.sm, marginTop: space.sm }}>
-            <Button title="Paylaş" icon="share-social" size="lg" onPress={() => void Share.share({ message: text })} />
-            <Row>
-              <View style={{ flex: 1 }}>
-                <Button title="Hikâye görseli" icon="image-outline" kind="secondary" loading={sharingImage} onPress={shareImage} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Button
-                  title="Kopyala"
-                  icon="copy-outline"
-                  kind="secondary"
-                  onPress={async () => {
-                    await Clipboard.setStringAsync(text);
-                    buzz('success');
-                    toast('Sonuç kopyalandı');
-                  }}
-                />
-              </View>
-            </Row>
-          </View>
         </Card>
       </Animated.View>
 
       <Reveal question={question} play={play} />
       {crowd.data && crowd.data.plays > 0 && <CrowdCard question={question} play={play} crowd={crowd.data} />}
-      {isToday && <LeagueNudge />}
-      {isToday && <NextQuestion day={question.day} onReached={onNextDay} />}
-
-      <ShareCard ref={cardRef} play={play} streak={streak} colors={c} />
     </View>
   );
 }
 
-/** Ligdeki yerin (en iyi sıradaki lig); lig yoksa lig kurmaya davet. */
-function LeagueNudge() {
-  const c = useColors();
-  const leagues = useLeagues();
-  if (!leagues.data) return null;
-  const best = [...leagues.data].sort((a, b) => a.myRank - b.myRank || b.memberCount - a.memberCount)[0];
-  const title = best ? `${best.name}: ${best.myRank}. sıradasın` : 'Arkadaşlarınla yarış';
-  const sub = best
-    ? best.memberCount > 1
-      ? `Bu hafta ${best.myTotal} puan · ${best.memberCount} kişi`
-      : 'Ligde henüz yalnızsın; kodu paylaş'
-    : 'Bir lig kur, haftalık sıralamada karşılaşın';
-  return (
-    <PressableScale
-      haptic="select"
-      accessibilityRole="button"
-      accessibilityLabel={`${title}. ${sub}`}
-      // Başka sekmenin yığınına geçiş: withAnchor ile altta lig listesi de kurulur (geri tuşu oraya döner).
-      onPress={() => router.navigate(best ? `/leagues/${best.id}` : '/leagues', { withAnchor: true })}>
-      <Card style={{ flexDirection: 'row', alignItems: 'center', gap: space.md }}>
-        <Text style={{ fontSize: 28 }} accessible={false}>
-          🏆
-        </Text>
-        <View style={{ flex: 1 }}>
-          <T variant="bodyStrong" numberOfLines={1}>
-            {title}
-          </T>
-          <T variant="caption" color="textMuted">
-            {sub}
-          </T>
-        </View>
-        <Icon name="chevron-forward" size={18} color={c.textSubtle} />
-      </Card>
-    </PressableScale>
-  );
+function resultMood(play: PlayState, q: PublicQuestion): SoroMood {
+  if (play.scorePending) return 'think';
+  if (q.format === 'poll') return (play.score ?? 0) >= 80 ? 'cheer' : 'think';
+  return play.solved ? 'cheer' : 'sad';
 }
 
 function headline(play: PlayState, q: PublicQuestion): string {
-  if (play.scorePending) return 'Oyun kaydedildi';
+  if (play.scorePending) return 'Cevabın kaydedildi';
   if (q.format === 'poll') return (play.score ?? 0) >= 80 ? 'Türkiye’yi iyi tanıyorsun!' : 'Türkiye seni şaşırttı';
-  if (play.solved) return (play.score ?? 0) >= 85 ? 'Muhteşem! 🎉' : 'Bildin!';
+  if (play.solved) return (play.score ?? 0) >= 85 ? 'Muhteşem!' : 'Bildin!';
   return 'Bu sefer olmadı';
 }
 
@@ -173,9 +91,13 @@ function subtitle(play: PlayState): string {
     }
     case 'compare':
       return `${play.compare?.answered.filter((a) => a.correct).length ?? 0}/${play.compare?.rounds ?? 5} tur doğru`;
+    case 'celeb': {
+      const n = play.celeb?.guesses.length ?? 0;
+      return play.solved ? `${n}. tahminde buldun` : 'Günün ünlüsü aşağıda';
+    }
     case 'poll': {
       const p = play.poll;
-      if (!p || p.actualPct == null) return 'Serin şimdiden sayıldı';
+      if (!p || p.actualPct == null) return 'Türkiye’nin cevabı gece yarısı kesinleşir; aşağıda şimdilik durum var';
       return `Gerçek: ${pct(p.actualPct)} · Tahminin: %${p.predictedPct}`;
     }
   }
@@ -186,7 +108,12 @@ function Reveal({ question, play }: { question: PublicQuestion; play: PlayState 
   const r = play.reveal;
   if (!r) return null;
   const options = play.trivia?.options;
-  const answer = r.answer != null ? formatAmount(r.answer, r.unit) : r.correctOption != null && options ? options[r.correctOption] : null;
+  const answer =
+    r.answer != null
+      ? formatAmount(r.answer, r.unit)
+      : r.correctOption != null && options
+        ? options[r.correctOption]
+        : (play.celeb?.answer?.name ?? null);
   // Ankette gösterilecek cevap ya da bilgi yoksa kart hiç çizilmez.
   if (!answer && !r.factText && !r.priceHistory?.length) return null;
   return (
@@ -200,29 +127,13 @@ function Reveal({ question, play }: { question: PublicQuestion; play: PlayState 
             <T variant="headline">{answer}</T>
           </View>
         )}
-        {r.priceHistory && r.priceHistory.length > 0 && (
-          <View style={{ gap: space.xs }}>
-            <T variant="caption" color="textMuted">
-              Geçmiş fiyatlar
-            </T>
-            <Row style={{ flexWrap: 'wrap' }}>
-              {r.priceHistory.map((p) => (
-                <View key={p.date} style={[styles.history, { backgroundColor: c.surfaceMuted }]}>
-                  <Text style={[font.caption, { color: c.textMuted }]}>{formatMonthYear(p.date)}</Text>
-                  <Text style={[font.bodyStrong, { color: c.text }]}>{formatAmount(p.price, r.unit)}</Text>
-                </View>
-              ))}
-            </Row>
-          </View>
-        )}
+        {r.priceHistory && r.priceHistory.length > 0 && <PriceHistoryChart history={r.priceHistory} today={r.answer} unit={r.unit} />}
         {r.factText && (
-          <View style={[styles.fact, { backgroundColor: c.accentSoft }]}>
-            <Row style={{ gap: space.sm }}>
-              <Icon name="bulb" size={18} color={c.accent} />
-              <T variant="bodyStrong" style={{ color: c.accent }}>
-                Bunu biliyor muydun?
-              </T>
-            </Row>
+          // Gazete kutusu gibi: solda kalın çizgi, nötr zemin.
+          <View style={[styles.fact, { backgroundColor: c.surfaceMuted, borderLeftWidth: 4, borderLeftColor: c.text }]}>
+            <T variant="label" color="textMuted">
+              Bunu biliyor muydun?
+            </T>
             <T>{r.factText}</T>
           </View>
         )}
@@ -305,7 +216,7 @@ function Histogram({ buckets, mine }: { buckets: number[]; mine: number }) {
         {buckets.map((b, i) => (
           <View key={i} style={styles.histCol}>
             {i === myBucket && <Text style={[font.caption, { fontFamily: fonts.black, color: c.accent }]}>Sen</Text>}
-            <View style={[styles.histBar, { height: 6 + (b / max) * 64, backgroundColor: i === myBucket ? c.accent : c.surfaceSunken }]} />
+            <View style={[styles.histBar, { height: 6 + (b / max) * 64, backgroundColor: i === myBucket ? c.accent : c.border }]} />
           </View>
         ))}
       </View>
@@ -321,48 +232,9 @@ function Histogram({ buckets, mine }: { buckets: number[]; mine: number }) {
   );
 }
 
-function NextQuestion({ day, onReached }: { day: string; onReached?: () => void }) {
-  const c = useColors();
-  const toast = useToast();
-  const { settings, update } = useSettings();
-  const now = useNow(1000);
-  const remaining = nextResetMs(day) - now;
-
-  if (remaining <= 0) return <Button title="Yeni soru geldi!" icon="sparkles" size="lg" onPress={() => onReached?.()} />;
-
-  return (
-    <Card tone="muted" style={{ alignItems: 'center' }}>
-      <T variant="label" color="textMuted">
-        Sonraki soru
-      </T>
-      <Text
-        style={[font.headline, { fontFamily: fonts.black, color: c.text, fontVariant: ['tabular-nums'] }]}
-        accessibilityLabel={`Sonraki soruya ${formatCountdown(remaining)} kaldı`}>
-        {formatCountdown(remaining)}
-      </Text>
-      {!settings.reminders && (
-        <Button
-          title="Bana hatırlat"
-          icon="alarm-outline"
-          kind="ghost"
-          onPress={async () => {
-            if (await ensureNotificationPermission()) {
-              update({ reminders: true });
-              toast('Her gün hatırlatacağız');
-            } else {
-              toast('Bildirim izni verilmedi');
-            }
-          }}
-        />
-      )}
-    </Card>
-  );
-}
-
 const styles = StyleSheet.create({
   pending: { width: 168, height: 168, borderRadius: 84, alignItems: 'center', justifyContent: 'center', gap: space.sm, padding: space.lg },
   squares: { fontSize: 28, letterSpacing: 3 },
-  history: { borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.sm },
   fact: { borderRadius: radius.md, padding: space.md, gap: space.xs },
   histogram: { flexDirection: 'row', alignItems: 'flex-end', gap: 4, height: 92 },
   histCol: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', gap: 2 },

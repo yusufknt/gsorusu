@@ -2,7 +2,8 @@
  * Uygulama içi test verisi. Değerler yaklaşıktır ve yalnızca deneme içindir; gerçek sorular
  * sunucudan, doğrulanmış kaynaklarla gelir.
  */
-import type { PricePoint, QuestionFormat } from '../api/types';
+import type { DailyMode, PricePoint, QuestionFormat, Story } from '../api/types';
+import type { MediaKey } from './mediaCredits';
 
 export interface MockQuestion {
   format: QuestionFormat;
@@ -11,11 +12,25 @@ export interface MockQuestion {
   answer?: number;
   options?: string[];
   correctOption?: number;
-  rounds?: { prompt?: string; a: string; b: string; correct: 0 | 1; valueA: string; valueB: string }[];
+  rounds?: { prompt?: string; a: string; b: string; correct: 0 | 1; valueA: string; valueB: string; mediaA?: MediaKey; mediaB?: MediaKey }[];
+  /** Soru görseli (mock/mediaCredits.ts anahtarı). */
+  media?: MediaKey;
+  /** "Hangi ünlü?" cevabı (mock/celebs.ts'teki ad). */
+  celeb?: string;
   fact?: string;
   priceHistory?: PricePoint[];
+  /** Yapar mıydın?: Soro'nun anlattığı hikâye ve sondaki soru. */
+  story?: Story;
   /** "Türkiye ne diyor?" için simüle edilen oy dağılımı (ağırlıklar). */
   pollWeights?: number[];
+}
+
+/** Güne ve moda yerleşmiş soru (test sunucusu). */
+export interface ResolvedQuestion extends MockQuestion {
+  id: number;
+  no: number;
+  day: string;
+  mode: DailyMode;
 }
 
 export const SOURCE_TEXT = 'Test verisi — değerler yaklaşıktır';
@@ -36,6 +51,7 @@ export const BANK: Record<QuestionFormat, MockQuestion[]> = {
     {
       format: 'price',
       prompt: '1 litre tam yağlı süt kaç TL?',
+      media: 'sut',
       unit: 'TL',
       answer: 45,
       fact: 'Çiğ süt fiyatı yılda birkaç kez Ulusal Süt Konseyi tarafından açıklanır; raf fiyatı buna göre değişir.',
@@ -55,6 +71,7 @@ export const BANK: Record<QuestionFormat, MockQuestion[]> = {
     {
       format: 'price',
       prompt: 'Bir kafede orta boy Türk kahvesi kaç TL?',
+      media: 'turk_kahvesi',
       unit: 'TL',
       answer: 120,
       fact: 'Türk kahvesi kültürü ve geleneği 2013’te UNESCO Somut Olmayan Kültürel Miras listesine girdi.',
@@ -66,6 +83,7 @@ export const BANK: Record<QuestionFormat, MockQuestion[]> = {
     {
       format: 'price',
       prompt: '1 kg domates (semt pazarı) kaç TL?',
+      media: 'domates',
       unit: 'TL',
       answer: 40,
       fact: 'Domates fiyatı mevsime göre en çok oynayan ürünlerden; kışın sera üretimi fiyatı yukarı çeker.',
@@ -73,7 +91,7 @@ export const BANK: Record<QuestionFormat, MockQuestion[]> = {
     },
   ],
   number: [
-    { format: 'number', prompt: 'Galata Kulesi kaç metre?', unit: 'm', answer: 63, fact: 'Kule 1348’de Cenevizliler tarafından inşa edildi.' },
+    { format: 'number', prompt: 'Galata Kulesi kaç metre?', media: 'galata', unit: 'm', answer: 63, fact: 'Kule 1348’de Cenevizliler tarafından inşa edildi.' },
     {
       format: 'number',
       prompt: 'Boğaziçi Köprüsü’nün iki ayağı arası kaç metre?',
@@ -81,8 +99,8 @@ export const BANK: Record<QuestionFormat, MockQuestion[]> = {
       answer: 1074,
       fact: 'Köprü 1973’te, Cumhuriyet’in 50. yılında açıldı.',
     },
-    { format: 'number', prompt: 'Ağrı Dağı kaç metre?', unit: 'm', answer: 5137, fact: 'Türkiye’nin en yüksek dağıdır.' },
-    { format: 'number', prompt: 'İstanbul’da kaç ilçe var?', unit: 'ilçe', answer: 39, fact: '25’i Avrupa, 14’ü Anadolu yakasındadır.' },
+    { format: 'number', prompt: 'Ağrı Dağı kaç metre?', media: 'agri', unit: 'm', answer: 5137, fact: 'Türkiye’nin en yüksek dağıdır.' },
+    { format: 'number', prompt: 'İstanbul’da kaç ilçe var?', media: 'istanbul', unit: 'ilçe', answer: 39, fact: '25’i Avrupa, 14’ü Anadolu yakasındadır.' },
     { format: 'number', prompt: 'Van Gölü’nün yüzölçümü kaç km²?', unit: 'km²', answer: 3713, fact: 'Dünyanın en büyük sodalı göllerinden biridir.' },
   ],
   poll: [
@@ -155,9 +173,6 @@ export const BANK: Record<QuestionFormat, MockQuestion[]> = {
       fact: 'Osmangazi Köprüsü açıldığında dünyanın en uzun 4. asma köprüsüydü.',
     },
   ],
+  // "Hangi ünlü?" soruları mock/dailyBank.ts'te ünlü listesinden üretilir.
+  celeb: [],
 };
-
-/** Plan A3, MVP haftası. */
-export function formatForWeekday(weekday: number): QuestionFormat {
-  return (['poll', 'price', 'number', 'poll', 'trivia', 'price', 'compare'] as const)[weekday];
-}

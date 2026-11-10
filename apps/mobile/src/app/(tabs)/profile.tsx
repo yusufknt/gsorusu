@@ -10,11 +10,14 @@ import { recentAdEvents, subscribeAdEvents } from '@/ads/events';
 import { installDayNo, rollover } from '@/ads/policy';
 import { API_URL, IS_MOCK, serverNow } from '@/api/client';
 import { useMe, useStats, useUpdateMe } from '@/api/hooks';
+import { Columns } from '@/components/layout/Columns';
+import { PageHero } from '@/components/layout/PageHero';
+import { PremiumCard } from '@/components/premium/PremiumCard';
 import {
   Button,
   Card,
-  Icon,
   ErrorView,
+  Icon,
   InlineError,
   LinkRow,
   LoadingScreen,
@@ -26,10 +29,10 @@ import {
   ToggleRow,
   useToast,
 } from '@/components/ui';
-import { istanbulDay, trUpper } from '@/lib/format';
+import { istanbulDay } from '@/lib/format';
 import { useHaptics } from '@/lib/haptics';
 import { ensureNotificationPermission } from '@/lib/reminders';
-import { mockAddLeagueBots, mockReset, mockShiftDays } from '@/mock/server';
+import { mockCompletePuzzle, mockReset, mockShiftDays } from '@/mock/server';
 import { useSettings, type ThemePref } from '@/settings/settings';
 import { font, fonts, minTouch, radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/useTheme';
@@ -52,126 +55,136 @@ export default function ProfileScreen() {
 
   const name = draft ?? me.data.displayName ?? '';
   const nameChanged = name.trim() !== (me.data.displayName ?? '');
-  const initials = trUpper((me.data.displayName ?? '?').trim().slice(0, 1) || '?');
+  const displayName = me.data.displayName;
 
   return (
-    <Screen>
-      <Row style={{ gap: space.lg }}>
-        <View style={[styles.avatar, { backgroundColor: c.accent }]}>
-          {me.data.displayName ? (
-            <Text style={[font.headline, { color: '#FFFFFF' }]}>{initials}</Text>
-          ) : (
-            <Icon name="person" size={30} color="#FFFFFF" />
-          )}
-        </View>
-        <View style={{ flex: 1 }}>
-          <T variant="headline">{me.data.displayName ?? 'Oyuncu'}</T>
-          <T color="textMuted">
-            🔥 {stats.data?.currentStreak ?? 0} gün seri · {stats.data?.played ?? 0} oyun
-          </T>
-        </View>
-      </Row>
+    <Screen width="wide">
+      <PageHero
+        eyebrow="Profil"
+        title={displayName ?? 'Oyuncu'}
+        subtitle={`${stats.data?.currentStreak ?? 0} gün seri · ${stats.data?.played ?? 0} oyun`}
+        mood="wave"
+        say={displayName ? `Selam ${displayName}!` : 'Adını yaz, sana öyle seslenelim.'}
+      />
 
-      <SectionTitle>Profil</SectionTitle>
-      <Card>
-        <T variant="bodyStrong">Görünen ad</T>
-        <TextInput
-          value={name}
-          onChangeText={setDraft}
-          maxLength={24}
-          placeholder="Adın (isteğe bağlı)"
-          placeholderTextColor={c.textSubtle}
-          accessibilityLabel="Görünen ad"
-          style={[styles.input, font.body, { color: c.text, borderColor: c.border, backgroundColor: c.background }]}
-        />
-        {nameChanged && (
-          <Button
-            title="Kaydet"
-            icon="checkmark"
-            loading={update.isPending}
-            onPress={() =>
-              update.mutate(
-                { displayName: name.trim() },
-                {
-                  onSuccess: () => {
-                    setDraft(null);
-                    toast('Kaydedildi');
-                  },
-                },
-              )
-            }
-          />
-        )}
-        <InlineError error={update.error} />
-      </Card>
+      <Columns
+        main={
+          <>
+            <SectionTitle>Profil</SectionTitle>
+            <Card>
+              <T variant="bodyStrong">Görünen ad</T>
+              <TextInput
+                value={name}
+                onChangeText={setDraft}
+                maxLength={24}
+                placeholder="Adın (isteğe bağlı)"
+                placeholderTextColor={c.textSubtle}
+                accessibilityLabel="Görünen ad"
+                style={[styles.input, font.body, { color: c.text, borderColor: c.border, backgroundColor: c.background }]}
+              />
+              {nameChanged && (
+                <Button
+                  title="Kaydet"
+                  icon="checkmark"
+                  loading={update.isPending}
+                  onPress={() =>
+                    update.mutate(
+                      { displayName: name.trim() },
+                      {
+                        onSuccess: () => {
+                          setDraft(null);
+                          toast('Kaydedildi');
+                        },
+                      },
+                    )
+                  }
+                />
+              )}
+              <InlineError error={update.error} />
+            </Card>
 
-      <SectionTitle>Hatırlatma</SectionTitle>
-      <Card>
-        <ToggleRow
-          icon="notifications-outline"
-          title="Günlük hatırlatma"
-          subtitle="Seri tehlikedeyse 21:00’de bir kez daha"
-          value={settings.reminders}
-          onChange={async (v) => {
-            if (v && !(await ensureNotificationPermission())) {
-              toast('Bildirim izni verilmedi');
-              return;
-            }
-            updateSettings({ reminders: v });
-          }}
-        />
-        {settings.reminders && (
-          <View style={styles.hours}>
-            {HOURS.map((h) => {
-              const selected = me.data.notifyHour === h;
-              return (
-                <Pressable
-                  key={h}
-                  accessibilityRole="radio"
-                  accessibilityState={{ selected }}
-                  onPress={() => {
-                    buzz('select');
-                    update.mutate({ notifyHour: h });
-                  }}
-                  style={[styles.hour, { borderColor: selected ? c.accent : c.border, backgroundColor: selected ? c.accentSoft : c.surface }]}>
-                  <Text style={[font.bodyStrong, { color: selected ? c.accent : c.text }]}>{String(h).padStart(2, '0')}:00</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        )}
-      </Card>
+            <SectionTitle>Hatırlatma</SectionTitle>
+            <Card>
+              <ToggleRow
+                icon="notifications-outline"
+                title="Günlük hatırlatma"
+                subtitle="Seri tehlikedeyse 21:00’de bir kez daha"
+                value={settings.reminders}
+                onChange={async (v) => {
+                  if (v && !(await ensureNotificationPermission())) {
+                    toast('Bildirim izni verilmedi');
+                    return;
+                  }
+                  updateSettings({ reminders: v });
+                }}
+              />
+              {settings.reminders && (
+                <View style={styles.hours}>
+                  {HOURS.map((h) => {
+                    const selected = me.data.notifyHour === h;
+                    return (
+                      <Pressable
+                        key={h}
+                        accessibilityRole="radio"
+                        accessibilityState={{ selected }}
+                        onPress={() => {
+                          buzz('select');
+                          update.mutate({ notifyHour: h });
+                        }}
+                        style={[styles.hour, { borderColor: selected ? c.text : c.border, backgroundColor: selected ? c.text : c.surface }]}>
+                        <Text style={[font.bodyStrong, { color: selected ? c.background : c.text }]}>{String(h).padStart(2, '0')}:00</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              )}
+            </Card>
+          </>
+        }
+        side={
+          <>
+            <SectionTitle>Görünüm</SectionTitle>
+            <Card>
+              <Segmented<ThemePref>
+                value={settings.theme}
+                onChange={(theme) => updateSettings({ theme })}
+                options={[
+                  { value: 'system', label: 'Sistem' },
+                  { value: 'light', label: 'Açık' },
+                  { value: 'dark', label: 'Koyu' },
+                ]}
+              />
+              <ToggleRow
+                icon="phone-portrait-outline"
+                title="Titreşim"
+                subtitle="Dokunuşlarda hafif geri bildirim"
+                value={settings.haptics}
+                onChange={(haptics) => updateSettings({ haptics })}
+              />
+            </Card>
 
-      <SectionTitle>Görünüm</SectionTitle>
-      <Card>
-        <Segmented<ThemePref>
-          value={settings.theme}
-          onChange={(theme) => updateSettings({ theme })}
-          options={[
-            { value: 'system', label: 'Sistem' },
-            { value: 'light', label: 'Açık' },
-            { value: 'dark', label: 'Koyu' },
-          ]}
-        />
-        <ToggleRow icon="phone-portrait-outline" title="Titreşim" subtitle="Dokunuşlarda hafif geri bildirim" value={settings.haptics} onChange={(haptics) => updateSettings({ haptics })} />
-      </Card>
+            <SectionTitle>Premium</SectionTitle>
+            <PremiumCard />
 
-      <SectionTitle>Yardım</SectionTitle>
-      <Card>
-        <LinkRow icon="help-circle-outline" title="Nasıl oynanır?" onPress={() => router.push('/how-to-play')} />
-        <View style={[styles.divider, { backgroundColor: c.border }]} />
-        <Row style={{ alignItems: 'flex-start', gap: space.md }}>
-          <View style={[styles.rowIcon, { backgroundColor: c.surfaceMuted }]}>
-            <Text style={{ fontSize: 16 }}>🔒</Text>
-          </View>
-          <View style={{ flex: 1, gap: 2 }}>
-            <T variant="bodyStrong">Gizlilik</T>
-            <T variant="caption" color="textMuted">
-              Üyelik yok, e-posta toplamıyoruz. Seni yalnızca bu cihaza özel rastgele bir kimlikle tanıyoruz.
-            </T>
-          </View>
-        </Row>
-      </Card>
+            <SectionTitle>Yardım</SectionTitle>
+            <Card>
+              <LinkRow icon="help-circle-outline" title="Nasıl oynanır?" onPress={() => router.push('/how-to-play')} />
+              <View style={[styles.divider, { backgroundColor: c.border }]} />
+              <Row style={{ alignItems: 'flex-start', gap: space.md }}>
+                <View style={[styles.rowIcon, { backgroundColor: c.surfaceMuted }]}>
+                  <Icon name="lock-closed" size={16} color={c.textMuted} />
+                </View>
+                <View style={{ flex: 1, gap: 2 }}>
+                  <T variant="bodyStrong">Gizlilik</T>
+                  <T variant="caption" color="textMuted">
+                    Üyelik yok, e-posta toplamıyoruz. Seni yalnızca bu cihaza özel rastgele bir kimlikle tanıyoruz.
+                  </T>
+                </View>
+              </Row>
+            </Card>
+          </>
+        }
+      />
 
       {IS_MOCK && <DevTools />}
 
@@ -186,6 +199,7 @@ export default function ProfileScreen() {
 /** Yalnızca test modunda: günü ileri al (seri ve arşivi denemek için) ve verileri sıfırla. */
 function DevTools() {
   const qc = useQueryClient();
+  const { update } = useSettings();
   const toast = useToast();
   const ads = useAds();
   const refresh = () => qc.invalidateQueries();
@@ -223,14 +237,15 @@ function DevTools() {
             />
           </View>
         </Row>
+        <Button title="Tanıtımı yeniden göster" icon="sparkles-outline" kind="secondary" onPress={() => update({ onboarded: false })} />
         <Button
-          title="Liglerime test oyuncusu ekle"
-          icon="people-outline"
+          title="Koleksiyona yapboz ekle"
+          icon="extension-puzzle"
           kind="secondary"
           onPress={async () => {
-            const added = await mockAddLeagueBots();
+            await mockCompletePuzzle();
             await refresh();
-            toast(added > 0 ? `${added} test oyuncusu eklendi` : 'Önce Lig sekmesinden bir lig kur');
+            toast('Sıradaki resim koleksiyona eklendi');
           }}
         />
       </Card>
@@ -302,7 +317,6 @@ function AdDevTools() {
 }
 
 const styles = StyleSheet.create({
-  avatar: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center' },
   input: { borderWidth: 1.5, borderRadius: radius.md, paddingHorizontal: space.md, minHeight: minTouch, fontFamily: fonts.semibold },
   hours: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   hour: { borderWidth: 1.5, borderRadius: radius.pill, minHeight: 44, minWidth: 76, alignItems: 'center', justifyContent: 'center' },

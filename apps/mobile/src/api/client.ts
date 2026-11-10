@@ -137,6 +137,6 @@ export async function api<T>(method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'
     res = await send(method, path, body, await authenticate());
     if (res.status === 401) throw await toApiError(res);
   }
-  // 204: gövdesiz başarı (ör. ligden ayrılma).
+  // 204: gövdesiz başarı.
   return res.status === 204 ? (undefined as T) : ((await res.json()) as T);
 }

@@ -10,6 +10,7 @@ export const FORMAT_LABEL: Record<QuestionFormat, string> = {
   poll: 'Türkiye ne diyor?',
   trivia: 'Bilgi',
   compare: 'Hangisi daha…?',
+  celeb: 'Hangi ünlü?',
 };
 
 const MONTHS = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
@@ -38,25 +39,9 @@ export function formatMonthYear(day: string): string {
   return `${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 }
 
-/** Lig haftası: "7–13 Aralık", ay değişirse "28 Aralık – 3 Ocak". */
-export function formatWeekRange(start: string, end: string): string {
-  const a = parseDay(start);
-  const b = parseDay(end);
-  return a.getUTCMonth() === b.getUTCMonth()
-    ? `${a.getUTCDate()}–${b.getUTCDate()} ${MONTHS[b.getUTCMonth()]}`
-    : `${a.getUTCDate()} ${MONTHS[a.getUTCMonth()]} – ${b.getUTCDate()} ${MONTHS[b.getUTCMonth()]}`;
-}
-
 /** Verilen andaki İstanbul günü ("2026-12-10"). */
 export function istanbulDay(ms: number): string {
   return new Date(ms + 3 * 3_600_000).toISOString().slice(0, 10);
-}
-
-const SHORT_WEEKDAYS = ['Pz', 'Pt', 'Sa', 'Ça', 'Pe', 'Cu', 'Ct'];
-
-/** "2026-12-10" → "Pe" */
-export function shortWeekday(day: string): string {
-  return SHORT_WEEKDAYS[parseDay(day).getUTCDay()];
 }
 
 /** Bir sonraki sorunun açılacağı an (ms): verilen günün ertesi günü 00:00, İstanbul. */
@@ -146,4 +131,10 @@ export function pctOf(n: number): string {
   const text = formatTrNumber(n, 1);
   const [int, frac] = text.split(',');
   return `%${text}'${possessiveSuffix(frac ?? int)}`;
+}
+
+/** "%72'sinden", "%60'ından": "… oyuncuların X iyisin" için çıkma hâli (kalın ünlüden sonra -ndan). */
+export function pctFrom(n: number): string {
+  const base = pctOf(n);
+  return `${base}${/[ıu]$/.test(base) ? 'ndan' : 'nden'}`;
 }

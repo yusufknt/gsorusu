@@ -76,7 +76,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     {
         Clock.SetIstanbul(2026, 12, 10);
         await WithDbAsync(db => db.Database.ExecuteSqlRawAsync(
-            "TRUNCATE league_members, leagues, question_crowd, poll_votes, player_stats, plays, players, questions RESTART IDENTITY CASCADE"));
+            "TRUNCATE question_crowd, poll_votes, player_stats, plays, players, questions RESTART IDENTITY CASCADE"));
     }
 
     public async Task WithDbAsync(Func<GunDbContext, Task> action)

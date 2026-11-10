@@ -26,7 +26,7 @@ export function StreakRepairCard() {
     } finally {
       setWatching(false);
     }
-    repair.mutate(undefined, { onSuccess: () => toast('Serin kurtarıldı 🔥') });
+    repair.mutate(undefined, { onSuccess: () => toast('Serin kurtarıldı') });
   };
 
   return (

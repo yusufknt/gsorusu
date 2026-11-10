@@ -12,10 +12,6 @@ import {
   EMPTY_STREAK,
   effectiveStreak,
   evaluateGuess,
-  generateLeagueCode,
-  normalizeLeagueCode,
-  rankStandings,
-  weekStart,
   niceStep,
   numericScore,
   pollPercentages,
@@ -99,45 +95,4 @@ test('seri', () => {
   assert.ok(!canRepair(recordPlay(r, '2026-12-13'), '2026-12-15'));
   // Mazeretli gün seriyi bozmaz.
   assert.equal(recordPlay(s, '2026-12-13', (d) => d === '2026-12-12').current, 3);
-});
-
-test('lig haftası Pazartesi başlar', () => {
-  assert.equal(weekStart('2026-12-07'), '2026-12-07');
-  assert.equal(weekStart('2026-12-09'), '2026-12-07');
-  assert.equal(weekStart('2026-12-13'), '2026-12-07');
-  assert.equal(weekStart('2026-12-14'), '2026-12-14');
-  assert.equal(weekStart('2027-01-01'), '2026-12-28');
-});
-
-test('lig kodu', () => {
-  assert.equal(normalizeLeagueCode('K7P2QX'), 'K7P2QX');
-  assert.equal(normalizeLeagueCode(' k7p-2qx '), 'K7P2QX');
-  assert.equal(normalizeLeagueCode('K7P 2QX'), 'K7P2QX');
-  for (const bad of ['şehir1', 'K7P2Q', 'K7P2QXA', 'K0P2QX', '', 'abcdeı', 'abcdei', 'ABCDEİ', null]) {
-    assert.equal(normalizeLeagueCode(bad), null, String(bad));
-  }
-  for (let i = 0; i < 200; i++) {
-    const code = generateLeagueCode();
-    assert.equal(normalizeLeagueCode(code), code);
-  }
-});
-
-test('lig sıralaması: eşitlik aynı sıra, sonraki atlanır', () => {
-  const ranked = rankStandings([
-    { key: 'a', name: 'Ayşe', total: 250, played: 3 },
-    { key: 'b', name: 'Bora', total: 300, played: 3 },
-    { key: 'c', name: 'Cem', total: 250, played: 3 },
-    { key: 'd', name: 'Deniz', total: 100, played: 1 },
-  ]);
-  assert.deepEqual(ranked.map((r) => r.key), ['b', 'a', 'c', 'd']);
-  assert.deepEqual(ranked.map((r) => r.rank), [1, 2, 2, 4]);
-
-  const tied = rankStandings([
-    { key: 'z', name: 'Zeynep', total: 0, played: 0 },
-    { key: 'c', name: 'Çağla', total: 0, played: 0 },
-    { key: 'can', name: 'Can', total: 0, played: 0 },
-    { key: 'p', name: 'Pelin', total: 0, played: 1 },
-  ]);
-  assert.deepEqual(tied.map((r) => r.key), ['p', 'can', 'c', 'z']);
-  assert.ok(tied.every((r) => r.rank === 1));
 });

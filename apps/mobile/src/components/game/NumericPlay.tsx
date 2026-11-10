@@ -16,15 +16,17 @@ import { Button, Card, Icon, InlineError, PressableScale, Row, T } from '@/compo
 import { directionLabel, formatAmount } from '@/lib/format';
 import { useHaptics } from '@/lib/haptics';
 import { displayInput, inputValue } from '@/lib/keypad';
-import { font, fonts, radius, shadow, space } from '@/theme/tokens';
+import { font, fonts, radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/useTheme';
 
+import { HeatMeter } from './HeatMeter';
 import { Keypad } from './Keypad';
 
 const NO_GUESSES: Guess[] = [];
 
 /**
- * Fiyatı Ne? ve Sayı tahmini: 6 hak, her tahminde yön, %10 içinde "çok yakın".
+ * Kaç? (fiyat ve sayı tahmini): 6 hak, her tahminde yön, %10 içinde "çok yakın". Üstte sıcak–soğuk
+ * termometresi: yaklaştıkça dolar, Soro tepki verir, cevabın bulunduğu aralık yazar (HeatMeter).
  * Ödüllü reklamla: 3. tahminden sonra ipucu; 6 hak bitince cevap açılmadan önce 1 tahmin daha.
  */
 export function NumericPlay({
@@ -88,6 +90,7 @@ export function NumericPlay({
   return (
     <View style={{ gap: space.md }}>
       <AttemptDots guesses={guesses} max={max} />
+      <HeatMeter guesses={guesses} question={question} />
 
       {guesses.map((g, i) => (
         <GuessRow key={i} index={i} guess={g} question={question} />
@@ -127,7 +130,7 @@ export function NumericPlay({
         <>
           <Row style={{ gap: space.sm }}>
             <Animated.View
-              style={[styles.display, { backgroundColor: c.surface, borderColor: text ? c.accent : c.border }, displayStyle]}
+              style={[styles.display, { backgroundColor: c.surface, borderColor: text ? c.text : c.border }, displayStyle]}
               accessibilityLabel={text ? `Tahmin: ${displayInput(text)}` : 'Tahmin girilmedi'}
               accessibilityLiveRegion="polite">
               <Text
@@ -143,8 +146,8 @@ export function NumericPlay({
               accessibilityLabel="Tahmin et"
               disabled={!text || busy}
               onPress={submit}
-              style={[styles.submit, { backgroundColor: c.accent }, shadow(c.accent, 2)]}>
-              {busy ? <ActivityIndicator color={c.textOnAccent} /> : <Icon name="arrow-forward" size={30} color={c.textOnAccent} />}
+              style={[styles.submit, { backgroundColor: c.text }]}>
+              {busy ? <ActivityIndicator color={c.background} /> : <Icon name="arrow-forward" size={30} color={c.background} />}
             </PressableScale>
           </Row>
 
@@ -250,7 +253,7 @@ function GuessRow({ index, guess, question }: { index: number; guess: Guess; que
       : guess.direction === 'higher'
         ? { bg: c.higherSoft, fg: c.higher }
         : { bg: c.lowerSoft, fg: c.lower };
-  const icon = correct ? 'checkmark-circle' : guess.direction === 'higher' ? 'arrow-up-circle' : 'arrow-down-circle';
+  const icon = correct ? 'checkmark-circle' : guess.direction === 'higher' ? 'arrow-up' : 'arrow-down';
   const label = directionLabel(guess.direction, question.format);
 
   return (

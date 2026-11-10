@@ -17,12 +17,13 @@ import { useFormatStyle } from './formatStyle';
 const TIPS: Record<QuestionFormat, string | null> = {
   price: '6 hakkın var. Her tahminden sonra “daha pahalı” ya da “daha ucuz” deriz; ±%5 içinde bulursan kazanırsın.',
   number: '6 hakkın var. Her tahminden sonra “daha fazla” ya da “daha az” deriz; ±%5 içinde bulursan kazanırsın.',
-  poll: 'Cevabını seç, sonra oyuncuların yüzde kaçının seninle aynı dediğini tahmin et. Sonuç gece yarısı belli olur.',
+  poll: 'Yapar mıydın? Cevabını seç, sonra Türkiye’nin yüzde kaçının seninle aynı dediğini tahmin et. Sonuç gece yarısı belli olur.',
   trivia: null,
-  compare: '5 hızlı tur: iki seçenekten hangisi “daha…” ise onu seç. Her doğru tur 20 puan.',
+  compare: '5 hızlı tur: pahalı bulduğun tarafa dokun. Sağdaki kart sonraki turda sola geçer ve fiyatı bilinir. Her doğru tur 20 puan.',
+  celeb: 'Bir ünlü yaz. 8 kutu yanar: yeşil aynı, turuncu yakın, kırmızı farklı. “Bildiklerin” kalan olasılıkları gösterir; 3. tahminden sonra ipucu açılır.',
 };
 
-const WELCOME = 'Hoş geldin! Her gün herkese aynı soru gelir.';
+const WELCOME = 'Hoş geldin! Her gün herkese aynı 4 oyun gelir.';
 
 /** Gösterilecek mi? Oyuncu bu formatı daha önce görmediyse ve oyun bitmediyse. */
 export function shouldShowTip(format: QuestionFormat, seen: QuestionFormat[], finished: boolean): boolean {

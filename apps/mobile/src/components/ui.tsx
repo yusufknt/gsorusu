@@ -1,4 +1,3 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ComponentProps, type ComponentRef, type ReactNode, type Ref } from 'react';
 import {
   ActivityIndicator,
@@ -13,6 +12,7 @@ import {
   type TextProps,
   type ViewProps,
   type ViewStyle,
+  useWindowDimensions,
 } from 'react-native';
 import Animated, {
   FadeInDown,
@@ -30,15 +30,26 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ApiError } from '@/api/client';
 import { pct, trUpper } from '@/lib/format';
 import { useHaptics } from '@/lib/haptics';
-import { font, fonts, minTouch, radius, shadow, space, type ThemeColors } from '@/theme/tokens';
+import { font, fonts, layout, minTouch, radius, shadow, space, type ThemeColors } from '@/theme/tokens';
 import { useColors } from '@/theme/useTheme';
 
-export type IconName = ComponentProps<typeof Ionicons>['name'];
+import { Doodle, doodleFor } from './doodles';
+import { ICONS, type IconName } from './icons';
+import { SoroFigure } from './mascot/SoroFigure';
+
+export type { IconName };
 type Variant = keyof typeof font;
 
+/**
+ * İkon: Soro tarzı çizimi varsa o (kendi renkleriyle; `color` yok sayılır), yoksa Lucide çizgi ikonu.
+ * Çizgi ikonlar maskotun kalın konturuyla uyumlu olsun diye kalın çizilir.
+ */
 export function Icon({ name, size = 20, color }: { name: IconName; size?: number; color?: string }) {
   const c = useColors();
-  return <Ionicons name={name} size={size} color={color ?? c.text} />;
+  const doodle = doodleFor(name);
+  if (doodle) return <Doodle name={doodle} size={size} />;
+  const Glyph = ICONS[name] ?? ICONS['help-circle-outline'];
+  return <Glyph size={size} color={color ?? c.text} strokeWidth={2.5} />;
 }
 
 export function T({
@@ -59,28 +70,47 @@ export function T({
   );
 }
 
-/** Kaydırılabilir ekran; sekmeli ekranlarda üst güvenli alanı kendisi bırakır. */
+/** İçerik sütununun en büyük genişliği: geniş ekranda (web, tablet) sayfa ortalanır, kenarlara yayılmaz. */
+const CONTENT_MAX = { narrow: layout.narrow, game: layout.game, wide: layout.wide } as const;
+/** Bu genişliğin üstünde iki sütunlu düzen (Bugün, Seri). */
+const WIDE_BREAKPOINT = 900;
+
+/** Geniş ekran mı (masaüstü web, yatay tablet)? İki sütunlu düzen için. */
+export function useWide(): boolean {
+  return useWindowDimensions().width >= WIDE_BREAKPOINT;
+}
+
+/** Kaydırılabilir ekran; sekmeli ekranlarda üst güvenli alanı kendisi bırakır. İçerik ortalanmış bir sütundadır. */
 export function Screen({
   children,
   topInset = true,
   refreshControl,
   contentStyle,
   scrollRef,
+  width = 'narrow',
 }: {
   children: ReactNode;
   topInset?: boolean;
+  /** narrow: tek sütun; game: oyun ekranı; wide: sekmeler (iki sütun, üst menüyle hizalı). Ölçüler: tokens.layout. */
+  width?: keyof typeof CONTENT_MAX;
   refreshControl?: ComponentProps<typeof ScrollView>['refreshControl'];
   contentStyle?: StyleProp<ViewStyle>;
   scrollRef?: Ref<ComponentRef<typeof ScrollView>>;
 }) {
   const c = useColors();
   const insets = useSafeAreaInsets();
+  const wide = useWide();
   return (
     <View style={{ flex: 1, backgroundColor: c.background }}>
       <ScrollView
         ref={scrollRef}
         style={{ flex: 1 }}
-        contentContainerStyle={[styles.screen, { paddingTop: (topInset ? insets.top : 0) + space.lg }, contentStyle]}
+        contentContainerStyle={[
+          styles.screen,
+          { paddingTop: (topInset ? insets.top : 0) + (wide ? space.xl : space.lg), maxWidth: CONTENT_MAX[width] },
+          wide && { paddingHorizontal: space.xxl, gap: space.xl },
+          contentStyle,
+        ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         refreshControl={refreshControl}>
@@ -110,7 +140,7 @@ export function Card({
       style={[
         styles.card,
         padded && { padding: space.lg },
-        muted ? { backgroundColor: c.surfaceMuted } : { backgroundColor: c.surface, ...shadow(c.shadow, 1) },
+        muted ? { backgroundColor: c.surfaceMuted } : { backgroundColor: c.surface, borderWidth: 1, borderColor: c.border },
         style,
       ]}>
       {children}
@@ -176,12 +206,13 @@ export function Button({
   accessibilityHint?: string;
 }) {
   const c = useColors();
-  const fg = kind === 'primary' ? c.textOnAccent : kind === 'ghost' ? c.accent : c.text;
+  // Gazete bulmacası dili: ana düğme siyah hap (koyu temada beyaz), ikincil düğme ince çerçeve.
+  const fg = kind === 'primary' ? c.background : kind === 'ghost' ? c.text : c.text;
   const bg: ViewStyle =
     kind === 'primary'
-      ? { backgroundColor: c.accent, ...shadow(c.accent, 2) }
+      ? { backgroundColor: c.text }
       : kind === 'secondary'
-        ? { backgroundColor: c.surface, borderColor: c.border, borderWidth: 1.5 }
+        ? { backgroundColor: c.surface, borderColor: c.text, borderWidth: 1 }
         : { backgroundColor: 'transparent' };
   return (
     <PressableScale
@@ -196,7 +227,7 @@ export function Button({
         <ActivityIndicator color={fg} />
       ) : (
         <>
-          {icon && <Ionicons name={icon} size={size === 'lg' ? 22 : 19} color={fg} />}
+          {icon && <Icon name={icon} size={size === 'lg' ? 22 : 19} color={fg} />}
           <Text style={[font.bodyStrong, size === 'lg' && { fontSize: 18 }, { color: fg }]}>{title}</Text>
         </>
       )}
@@ -207,7 +238,7 @@ export function Button({
 export function Chip({ label, icon, color, bg }: { label: string; icon?: IconName; color: string; bg: string }) {
   return (
     <View style={[styles.chip, { backgroundColor: bg }]}>
-      {icon && <Ionicons name={icon} size={14} color={color} />}
+      {icon && <Icon name={icon} size={14} color={color} />}
       <Text style={[font.caption, { fontFamily: fonts.extrabold, color }]}>{label}</Text>
     </View>
   );
@@ -285,16 +316,15 @@ export function Skeleton({ height, width = '100%', style }: { height: number; wi
   return <Animated.View style={[{ height, width, borderRadius: radius.md, backgroundColor: c.surfaceMuted }, animated, style]} />;
 }
 
+/** Yüklenirken Soro düşünür (iskelet kutular yerine; kısa bekleyişte de sayfa boş görünmez). */
 export function LoadingScreen() {
   const c = useColors();
-  const insets = useSafeAreaInsets();
   return (
-    <View style={{ flex: 1, backgroundColor: c.background, padding: space.lg, paddingTop: insets.top + space.lg, gap: space.lg }}>
-      <Skeleton height={150} style={{ borderRadius: radius.xl }} />
-      <Skeleton height={28} width="80%" />
-      <Skeleton height={64} />
-      <Skeleton height={64} />
-      <Skeleton height={64} />
+    <View style={[styles.center, { backgroundColor: c.background, gap: space.md }]} accessibilityLabel="Yükleniyor">
+      <SoroFigure size={96} mood="think" />
+      <T variant="caption" color="textMuted">
+        Yükleniyor…
+      </T>
     </View>
   );
 }
@@ -316,9 +346,7 @@ export function ErrorView({ error, onRetry }: { error: unknown; onRetry?: () => 
   const c = useColors();
   return (
     <View style={[styles.center, { backgroundColor: c.background, gap: space.lg }]}>
-      <View style={[styles.errorIcon, { backgroundColor: c.surfaceMuted }]}>
-        <Icon name="cloud-offline-outline" size={34} color={c.textMuted} />
-      </View>
+      <SoroFigure size={110} mood="sad" />
       <T variant="bodyStrong" center>
         {messageOf(error)}
       </T>
@@ -431,8 +459,10 @@ export function ToggleRow({
       <Switch
         value={value}
         onValueChange={onChange}
-        trackColor={{ true: c.accent, false: c.border }}
+        trackColor={{ true: c.correct, false: c.border }}
         thumbColor="#FFFFFF"
+        // RN Web açık hâlde topuzu ayrıca boyar (yoksa varsayılan turkuaz kalır).
+        {...({ activeThumbColor: '#FFFFFF' } as object)}
         accessibilityLabel={title}
       />
     </Row>
@@ -495,7 +525,7 @@ export function useToast() {
 }
 
 const styles = StyleSheet.create({
-  screen: { paddingHorizontal: space.lg, paddingBottom: space.xxxl * 2, gap: space.lg },
+  screen: { width: '100%', alignSelf: 'center', paddingHorizontal: space.lg, paddingBottom: space.xxxl * 2, gap: space.lg },
   statusBar: { position: 'absolute', top: 0, left: 0, right: 0, opacity: 0.94 },
   card: { borderRadius: radius.lg, gap: space.md },
   button: {
@@ -520,7 +550,7 @@ const styles = StyleSheet.create({
   choice: {
     minHeight: 60,
     borderRadius: radius.md,
-    borderWidth: 2,
+    borderWidth: 1.5,
     paddingHorizontal: space.lg,
     paddingVertical: space.md,
     flexDirection: 'row',

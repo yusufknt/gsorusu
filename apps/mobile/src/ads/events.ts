@@ -12,7 +12,8 @@ export interface AdEvent {
   type: AdEventType;
   placement: AdPlacement;
   at: number;
-  reason?: BlockReason | 'busy' | 'not_ready' | 'game_in_progress';
+  /** premium: reklamsız abonelik; ödül videosuz verildi ya da geçiş reklamı atlandı. */
+  reason?: BlockReason | 'busy' | 'not_ready' | 'game_in_progress' | 'premium';
 }
 
 const MAX = 30;

@@ -1,124 +1,160 @@
-import { LinearGradient } from 'expo-linear-gradient';
-import { useState } from 'react';
-import { RefreshControl, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import { RefreshControl, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
 
-import { serverNow } from '@/api/client';
 import { useStats } from '@/api/hooks';
 import type { Stats } from '@/api/types';
-import { useFormatStyle } from '@/components/game/formatStyle';
+import { PageHero } from '@/components/layout/PageHero';
+import { Collection } from '@/components/streak/Collection';
+import { ModeDistribution, SuccessByMode } from '@/components/streak/ModeCharts';
+import { SoroFigure, type SoroMood } from '@/components/mascot/SoroFigure';
+import { StreakPuzzle } from '@/components/streak/StreakPuzzle';
 import { StreakRepairCard } from '@/components/StreakRepairCard';
-import { Bar, Card, ErrorView, Icon, LoadingScreen, Row, Screen, SectionTitle, T } from '@/components/ui';
-import { addDays, FORMAT_LABEL, formatTrNumber, istanbulDay, shortWeekday } from '@/lib/format';
-import { font, fonts, radius, shadow, space } from '@/theme/tokens';
+import { Card, ErrorView, Icon, LoadingScreen, Row, Screen, T, useWide, type IconName } from '@/components/ui';
+import { formatTrNumber } from '@/lib/format';
+import { artById } from '@/lib/puzzleArt';
+import { PUZZLE_SIZE } from '@/mock/rules';
+import { font, fonts, radius, space } from '@/theme/tokens';
 import { useColors } from '@/theme/useTheme';
 
-const CAL_GAP = 6;
+const PUZZLE_MAX = 300;
 
-export default function StatsScreen() {
+/** Seri sekmesi: 15 parçalık yapboz, seri sayıları, kurallar ve koleksiyon. */
+export default function StreakScreen() {
   const c = useColors();
   const stats = useStats();
+  const { width } = useWindowDimensions();
+  const wide = useWide();
 
   if (stats.isError) return <ErrorView error={stats.error} onRetry={() => void stats.refetch()} />;
   if (stats.isPending) return <LoadingScreen />;
 
   const s = stats.data;
+  const p = s.puzzle ?? { size: PUZZLE_SIZE, pieces: 0, earnedToday: false, completed: 0 };
+  const art = artById(p.art ?? 'istanbul');
   // Puanı henüz kesinleşmemiş anketler "bilinen" oranına katılmaz.
   const scored = s.played - s.pendingScores;
   const solvedPct = scored > 0 ? `%${Math.round((s.solved / scored) * 100)}` : '—';
+  const puzzleWidth = wide ? 420 : Math.min(PUZZLE_MAX, width - space.xl * 2 - space.lg * 2);
 
-  return (
-    <Screen refreshControl={<RefreshControl refreshing={stats.isRefetching} onRefresh={() => void stats.refetch()} />}>
-      <T variant="headline" accessibilityRole="header">
-        İstatistik
-      </T>
+  const puzzle = (
+    <Animated.View entering={FadeInDown.duration(350)}>
+      <Card style={{ alignItems: 'center', gap: space.lg, paddingVertical: space.xl }}>
+        <Animated.View entering={ZoomIn.springify().damping(14)} style={[styles.frame, { borderColor: c.border, backgroundColor: c.background }]}>
+          <StreakPuzzle pieces={p.pieces} width={puzzleWidth} art={p.art} highlightLast={p.earnedToday} />
+          {/* Boş yapbozda Soro uyur; ilk parça onu uyandırır. */}
+          {p.pieces === 0 && (
+            <View style={styles.sleeper} pointerEvents="none">
+              <SoroFigure size={Math.round(puzzleWidth * 0.55)} mood="sleep" />
+            </View>
+          )}
+        </Animated.View>
+        <View style={{ alignItems: 'center', gap: 2 }}>
+          <T variant="title" center>
+            {p.pieces >= p.size ? `${art.title} tamamlandı!` : `${p.pieces}/${p.size} parça`}
+          </T>
+          {p.pieces < p.size && (
+            <T variant="caption" color="textMuted" center>
+              Bu yapbozun resmi: {p.pieces > 0 ? art.title : 'ilk parçayla belli olur'}
+            </T>
+          )}
+          <T color="textMuted" center>
+            {message(s)}
+          </T>
+        </View>
+      </Card>
+    </Animated.View>
+  );
 
-      <StreakHero stats={s} />
-
+  const details = (
+    <>
       {s.canRepairStreak && <StreakRepairCard />}
 
       <Row style={{ alignItems: 'stretch' }}>
-        <Tile icon="calendar" label="Oynanan gün" value={String(s.played)} />
-        <Tile icon="checkmark-done" label="Bilinen" value={solvedPct} />
-        <Tile icon="star" label="Ortalama" value={s.avgScore == null ? '—' : formatTrNumber(s.avgScore, 1)} />
+        <Big icon="flame" color={c.flame} value={s.currentStreak} label="Günlük seri" />
+        <Big icon="trophy" color={c.warning} value={s.maxStreak} label="En uzun" />
+        <Big icon="extension-puzzle" color={c.accent} value={p.completed} label="Biten yapboz" />
+      </Row>
+
+      <Card tone="muted" style={{ gap: space.sm }}>
+        <T variant="bodyStrong">Nasıl işler?</T>
+        <Rule icon="checkmark-circle" text="Günün 4 oyununu bitir → yapboza 1 parça." />
+        <Rule icon="alert-circle" text="Bir gün kaçırırsan seri sıfırlanır, parçalar dağılır." />
+        <Rule icon="bandage" text="Haftada bir kez kısa bir videoyla kaçırdığın günü kurtarabilirsin." />
+        <Rule icon="sunny" text="15 parça tamamlanınca resim koleksiyonuna girer; ertesi gün yeni resimle yeni yapboz başlar." />
+      </Card>
+
+      <Row style={{ alignItems: 'stretch' }}>
+        <Small label="Oynanan oyun" value={String(s.played)} />
+        <Small label="Bilinen" value={solvedPct} />
+        <Small label="Ortalama puan" value={s.avgScore == null ? '—' : formatTrNumber(s.avgScore, 1)} />
       </Row>
       {s.pendingScores > 0 && (
-        <Row style={{ gap: space.xs }}>
-          <Icon name="hourglass-outline" size={14} color={c.textMuted} />
-          <T variant="caption" color="textMuted">
-            {s.pendingScores} anket puanı gece yarısı kesinleşecek
-          </T>
-        </Row>
+        <T variant="caption" color="textMuted">
+          {s.pendingScores} anket puanı gece yarısı kesinleşecek.
+        </T>
       )}
+    </>
+  );
 
-      <SectionTitle>Son 4 hafta</SectionTitle>
-      <Calendar recent={s.recent} />
-
-      {s.byFormat.length > 0 && (
+  return (
+    <Screen
+      width={wide ? 'wide' : 'narrow'}
+      refreshControl={<RefreshControl refreshing={stats.isRefetching} onRefresh={() => void stats.refetch()} tintColor={c.accent} />}>
+      <PageHero eyebrow="Seri" title="Serin" subtitle="Her tamamlanan gün yapboza bir parça ekler; 15 parçada resim tamamlanır ve koleksiyonuna girer." mood={streakSoro(s).mood} say={streakSoro(s).say} />
+      {wide ? (
+        // Geniş ekran: solda yapboz, sağda sayılar ve kurallar.
+        <View style={styles.columns}>
+          <View style={{ width: 480 }}>{puzzle}</View>
+          <View style={styles.details}>{details}</View>
+        </View>
+      ) : (
         <>
-          <SectionTitle>Format bazında</SectionTitle>
-          <Card>
-            {s.byFormat.map((f, i) => (
-              <FormatRow key={f.format} {...f} delay={i * 80} />
-            ))}
-          </Card>
+          {puzzle}
+          {details}
         </>
       )}
-
-      {s.played === 0 && (
-        <Card tone="muted" style={{ alignItems: 'center', paddingVertical: space.xl }}>
-          <Icon name="sparkles-outline" size={32} color={c.textMuted} />
-          <T center color="textMuted">
-            İlk sorunu çözünce istatistiklerin burada görünecek.
-          </T>
-        </Card>
+      {s.byMode && (
+        // Geniş ekranda iki grafik yan yana.
+        <View style={wide ? styles.columns : { gap: space.lg }}>
+          <View style={wide ? styles.chart : undefined}>
+            <ModeDistribution stats={s.byMode} />
+          </View>
+          <View style={wide ? styles.chart : undefined}>
+            <SuccessByMode stats={s.byMode} />
+          </View>
+        </View>
       )}
+      <Collection items={s.collection ?? []} puzzle={p} />
     </Screen>
   );
 }
 
-function StreakHero({ stats: s }: { stats: Stats }) {
-  const c = useColors();
-  const message = s.playedToday
-    ? 'Bugünü tamamladın, yarın görüşürüz!'
-    : s.currentStreak > 0
-      ? 'Bugünün sorusunu çöz, seri devam etsin.'
-      : 'Bugün başla, serini büyüt.';
-  return (
-    <Animated.View entering={FadeInDown.duration(400)} style={[{ borderRadius: radius.xl }, shadow(c.heroTo, 2)]}>
-      <LinearGradient colors={[c.heroFrom, c.heroTo]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
-        <Row style={{ justifyContent: 'space-between', alignItems: 'flex-end' }}>
-          <View>
-            <Text style={styles.heroLabel}>GÜNLÜK SERİ</Text>
-            <Row style={{ alignItems: 'baseline', gap: space.xs }}>
-              <Text style={styles.heroValue} accessibilityLabel={`${s.currentStreak} günlük seri`}>
-                {s.currentStreak}
-              </Text>
-              <Text style={styles.heroUnit}>gün</Text>
-            </Row>
-          </View>
-          <Text style={styles.flame} accessible={false}>
-            🔥
-          </Text>
-        </Row>
-        <Text style={styles.heroText}>{message}</Text>
-        <View style={styles.heroDivider} />
-        <Row style={{ justifyContent: 'space-between' }}>
-          <Text style={styles.heroText}>En uzun seri</Text>
-          <Text style={[styles.heroText, { fontFamily: fonts.black }]}>{s.maxStreak} gün</Text>
-        </Row>
-      </LinearGradient>
-    </Animated.View>
-  );
+/** Seri sayfasında Soro: boş yapbozda uyur, bugün parça alındıysa sevinir, gün bekliyorsa hatırlatır. */
+function streakSoro(s: Stats): { mood: SoroMood; say: string } {
+  const pieces = s.puzzle?.pieces ?? 0;
+  const left = (s.puzzle?.size ?? PUZZLE_SIZE) - pieces;
+  if (s.playedToday) return { mood: 'cheer', say: left > 0 ? `${left} parça kaldı, resim tamamlanıyor!` : 'Resim koleksiyonunda! Yarın yenisi.' };
+  if (s.currentStreak > 0) return { mood: 'think', say: 'Bugünü bitir, yoksa parçalar dağılır.' };
+  // Yapbozun üstünde zaten uyuyan bir Soro var; başlıktaki el sallayıp çağırır.
+  return { mood: 'wave', say: 'Bir günü bitir, ilk parçayı al!' };
 }
 
-function Tile({ icon, label, value }: { icon: 'calendar' | 'checkmark-done' | 'star'; label: string; value: string }) {
+function message(s: Stats): string {
+  const left = (s.puzzle?.size ?? PUZZLE_SIZE) - (s.puzzle?.pieces ?? 0);
+  if (s.playedToday) return left > 0 ? `Bugünün parçası alındı. ${left} gün daha!` : 'Yarın yeni bir yapboz başlıyor.';
+  if (s.currentStreak > 0) return 'Bugünün 4 oyununu bitir, yoksa parçalar dağılır.';
+  return 'Bugün başla: her tamamlanan gün bir parça.';
+}
+
+function Big({ icon, color, value, label }: { icon: IconName; color: string; value: number; label: string }) {
   const c = useColors();
   return (
     <View style={{ flex: 1 }}>
-      <Card style={{ alignItems: 'center', flex: 1, gap: space.xs, paddingHorizontal: space.sm }}>
-        <Icon name={icon} size={20} color={c.accent} />
-        <Text style={[font.title, { color: c.text }]}>{value}</Text>
+      <Card style={{ alignItems: 'center', flex: 1, gap: 2, paddingHorizontal: space.sm }}>
+        <Icon name={icon} size={20} color={color} />
+        <Text style={[font.title, { fontFamily: fonts.black, color: c.text }]} accessibilityLabel={`${label}: ${value}`}>
+          {value}
+        </Text>
         <T variant="caption" color="textMuted" center>
           {label}
         </T>
@@ -127,90 +163,31 @@ function Tile({ icon, label, value }: { icon: 'calendar' | 'checkmark-done' | 's
   );
 }
 
-/** 28 günlük takvim: oynanan günler puana göre renklenir, bugün çerçevelidir. */
-function Calendar({ recent }: { recent: Stats['recent'] }) {
-  const c = useColors();
-  const [width, setWidth] = useState(0);
-  const cell = width > 0 ? Math.floor((width - CAL_GAP * 6) / 7) : 0;
-  const today = istanbulDay(serverNow());
-  const byDay = new Map(recent.map((r) => [r.day, r]));
-  const days = Array.from({ length: 28 }, (_, i) => addDays(today, i - 27));
-
-  const colorFor = (score: number | null | undefined, played: boolean) => {
-    if (!played) return c.surfaceMuted;
-    if (score == null) return c.textSubtle;
-    if (score >= 70) return c.correct;
-    if (score >= 40) return c.accent;
-    return c.close;
-  };
-
+function Small({ label, value }: { label: string; value: string }) {
   return (
-    <Card>
-      <View style={styles.calendar} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
-        {days.slice(0, 7).map((d) => (
-          <Text key={`h${d}`} style={[styles.calHead, { width: cell, color: c.textSubtle }]}>
-            {shortWeekday(d)}
-          </Text>
-        ))}
-        {days.map((d) => {
-          const r = byDay.get(d);
-          const isToday = d === today;
-          return (
-            <View
-              key={d}
-              accessible
-              accessibilityLabel={`${d}: ${r ? (r.score == null ? 'puan bekleniyor' : `${r.score} puan`) : 'oynanmadı'}`}
-              style={[styles.calCell, { width: cell, height: cell, backgroundColor: colorFor(r?.score, !!r) }, isToday && { borderWidth: 2, borderColor: c.text }]}>
-              <Text style={[font.caption, { fontFamily: fonts.extrabold, color: r ? '#FFFFFF' : c.textSubtle }]}>{Number(d.slice(8))}</Text>
-            </View>
-          );
-        })}
-      </View>
-      <Row style={{ justifyContent: 'center', gap: space.md, flexWrap: 'wrap' }}>
-        <Legend color={c.correct} label="70+" />
-        <Legend color={c.accent} label="40–69" />
-        <Legend color={c.close} label="0–39" />
-        <Legend color={c.textSubtle} label="bekliyor" />
-      </Row>
-    </Card>
-  );
-}
-
-function Legend({ color, label }: { color: string; label: string }) {
-  return (
-    <Row style={{ gap: 4 }}>
-      <View style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: color }} />
-      <T variant="caption" color="textMuted">
+    <View style={{ flex: 1, alignItems: 'center', gap: 2 }}>
+      <T variant="bodyStrong">{value}</T>
+      <T variant="caption" color="textMuted" center>
         {label}
       </T>
-    </Row>
+    </View>
   );
 }
 
-function FormatRow({ format, played, avgScore, delay }: Stats['byFormat'][number] & { delay: number }) {
-  const f = useFormatStyle(format);
+function Rule({ icon, text }: { icon: IconName; text: string }) {
+  const c = useColors();
   return (
-    <Row style={{ gap: space.md }}>
-      <View style={[styles.formatIcon, { backgroundColor: f.soft }]}>
-        <Icon name={f.icon} size={18} color={f.color} />
-      </View>
-      <View style={{ flex: 1 }}>
-        <Bar label={`${FORMAT_LABEL[format]} · ${played} oyun`} value={avgScore ?? 0} color={f.color} delay={delay} />
-      </View>
+    <Row style={{ alignItems: 'flex-start' }}>
+      <Icon name={icon} size={18} color={c.textMuted} />
+      <T style={{ flex: 1 }}>{text}</T>
     </Row>
   );
 }
 
 const styles = StyleSheet.create({
-  hero: { borderRadius: radius.xl, padding: space.xl, gap: space.sm },
-  heroLabel: { ...font.label, color: '#FFFFFF', opacity: 0.85 },
-  heroValue: { fontFamily: fonts.black, fontSize: 64, lineHeight: 70, color: '#FFFFFF' },
-  heroUnit: { fontFamily: fonts.extrabold, fontSize: 22, color: '#FFFFFF', opacity: 0.9 },
-  heroText: { ...font.body, color: '#FFFFFF' },
-  heroDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.3)', marginVertical: space.xs },
-  flame: { fontSize: 64 },
-  calendar: { flexDirection: 'row', flexWrap: 'wrap', gap: CAL_GAP },
-  calHead: { textAlign: 'center', fontFamily: fonts.extrabold, fontSize: 11 },
-  calCell: { borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  formatIcon: { width: 36, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  frame: { borderRadius: radius.md, borderWidth: 1, overflow: 'hidden', padding: space.sm },
+  sleeper: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
+  columns: { flexDirection: 'row', alignItems: 'flex-start', gap: space.xl },
+  details: { flex: 1, gap: space.lg, minWidth: 0 },
+  chart: { flex: 1, minWidth: 0 },
 });

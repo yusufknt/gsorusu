@@ -16,31 +16,31 @@
 
 | Aşama | Durum | Nerede |
 |---|---|---|
-| 1. Oyun kuralları (puanlama, seri, ipucu, gün sınırı, lig) | ✅ 101 test | `services/gunun-api/src/GununSorusu.Domain` |
+| 1. Oyun kuralları (puanlama, seri, ipucu, gün sınırı) | ✅ 101 test | `services/gunun-api/src/GununSorusu.Domain` |
 | 2. API + Postgres + Docker | ✅ 47 entegrasyon testi (gerçek Postgres) | `services/gunun-api` |
 | 3. Expo mobil uygulama, 5 formatın hepsi oynanıyor | ✅ emülatörde denendi | `apps/mobile` |
 | 4. Arayüz yenileme + uygulama içi test sunucusu | ✅ emülatörde açık/koyu temada denendi | `apps/mobile/src` |
-| 5. Arkadaş ligi (kod, haftalık sıralama) | ✅ sunucu + mobil, emülatörde açık/koyu temada denendi | `Leagues/`, `app/(tabs)/leagues` |
+| 5. Arkadaş ligi | ❌ 9 Kasım'da kaldırıldı (sunucu + mobil; tablolar migration `RemoveLeagues` ile silinir) | — |
 | 6. İlk açılış ipuçları + "dün" şeridi | ✅ emülatörde denendi; mobilde toplam 29 test | `components/game/FormatTip.tsx`, `YesterdayStrip.tsx` |
 | 7. Uygulama simgesi + açılış ekranı (geçici logo) | ✅ görseller üretildi, uygulama içi logo emülatörde denendi; expo-doctor 20/20 | `apps/mobile/scripts/render-brand.mjs`, `assets/` |
 | 8. Reklam yerleşimleri (ödüllü + geçiş), Expo Go'da test reklamıyla | ✅ emülatörde denendi; mobilde toplam 36 test | `apps/mobile/src/ads/` |
 
 ### Uygulamada şu an olanlar
-- **Formatlar:** Fiyatı Ne?, Sayı Tahmini, Türkiye ne diyor?, Bilgi (30 sn), Hangisi daha…? (5 tur).
-- **Ekranlar:** Bugün · İstatistik (seri, 4 haftalık takvim, format dağılımı) · Lig · Arşiv (son 7 gün) · Profil · Nasıl oynanır?
-- **Lig:** lig kur / koda katıl, davet kodu (kopyala, paylaş), haftalık sıralama (günlük kareler, madalyalar, eşit puanda aynı sıra), geçmiş haftalar ve "haftanın birincisi", sahip üye çıkarabilir, ligden ayrılma. Sonuç ekranında "Ligde X. sıradasın" kartı.
-- **İlk açılış:** her formatla ilk karşılaşmada kısa ipucu kartı (+ ilk kez açana "Hoş geldin"); tanıtım ekranı yok.
-- **Dün şeridi:** Bugün ekranında dünkü puan ve Türkiye ortalaması ya da "kaçırdın, arşivden oyna"; dokununca arşivdeki o gün açılır.
+- **Premium, sınırsız mod, sıralama, grafikler (karar #84–89, yalnız test sunucusunda):** onboarding'de girişten önce Ücretsiz / Premium (aylık 20 TL, test satın alması) seçimi, Profil'de premium bölümü; premium: sınırsız Hangisi pahalı? (`/practice`, günün pahalı oyunu bitince) ve reklamsız oyun. Gün bitince "Bugün oyuncuların %X'inden iyisin" kartı; Seri sayfasında mod mod başarı ve Wordle tarzı dağılım.
+- **Hangi ünlü?, ikonlar, koleksiyon (karar #74–79):** 135 ünlü (110'unda açık lisanslı fotoğraf), 10 hak, ipuçları, olası ünlüler ve gizli ünlü kartı; Soro tarzı çizim ikonlar; 15 günlük yapboz, her yapbozda farklı resim, Koleksiyonum sayfası (Bugün'den bağlantı). Açık konu: ünlü fotoğrafları için hukuk görüşü.
+- **Web kabuğu ve maskot (karar #71–72):** web'de üst menü / alt sekme + her sayfada aynı başlık kalıbı (PageHero) ve konuşan Soro; Bugün'de 2×2 mod kartları.
+- **Günlük set (karar #61–70):** her gün 4 mod: Hangisi pahalı? (Higher-Lower sahnesi, zincirli turlar, her turda görsel) · Kaç? · Yapar mıydın? · Hangi ünlü? (Loldle gibi 8 kutu). Dördü bitince gün tamamlanır; seri +1 ve 14 parçalık yapboza 1 parça. Kaçırılan günde parçalar dağılır; haftada 1 seri kurtarma.
+- **Ekranlar:** Bugün (mod kartları, ilerleme, yapboz önizlemesi, gün bitince sıralama + geri sayım) · Seri (büyük yapboz, sayılar) · Profil. Arşiv ve Nasıl oynanır? Bugün'den açılır. Web'de geniş ekranda iki sütun.
+- **İlk açılış:** Soro'lu üç adımlık tanıtım (Skia ile canlandırılmış, atlanabilir; karar #57–59), ardından her formatla ilk karşılaşmada kısa ipucu kartı (+ ilk kez açana "Hoş geldin").
+- **Görseller:** sorularda ve "Hangisi pahalı?" kartlarında CC0 / kamu malı fotoğraflar, altında kaynak yazısı (karar #65).
 - **Oyun içi:** özel sayı tuş takımı, ipucu, halka şeklinde geri sayım, VS kartları, puan halkası, konfeti, titreşim.
-- **Paylaşım:** renkli kare metni, kopyalama, 1080×1920 hikâye görseli (cevabı göstermez).
-- **Reklamlar (test reklamıyla):** ödüllü video → 6 hak bitince 1 tahmin daha, ipucu, seri kurtarma, arşivde günlük ücretsiz hak bitince soru açma. Geçiş reklamı → sonuçtan sonra sekme değiştirirken, arşiv oyunu bitince, genel sekme geçişlerinde; günde en fazla 2, ilk 2 gün yok, soru bitmeden yok. Ayrıntı: kararlar #51–56.
+- **Reklamlar (test reklamıyla):** ödüllü video → 6 hak bitince 1 tahmin daha, ipucu, seri kurtarma, arşivde günlük ücretsiz hak bitince soru açma. Premium aboneye reklam gösterilmez. Geçiş reklamı → sonuçtan sonra sekme değiştirirken, arşiv oyunu bitince, genel sekme geçişlerinde; günde en fazla 2, ilk 2 gün yok, soru bitmeden yok. Ayrıntı: kararlar #51–56.
 - **Diğer:** yerel günlük hatırlatma (+ seri tehlikedeyse 21:00), Sistem/Açık/Koyu tema, seri kurtarma.
-- **Test araçları (Profil):** "Bir gün ileri", "Sıfırla" ve "Liglerime test oyuncusu ekle"; ayrıca Reklam testi: kurulum günü, bugünkü geçiş reklamı sayısı, son reklam olayları, "İlk 2 günü atla", "Sayaçları sıfırla". Yalnızca test modunda görünür. Test modunda geçerli herhangi bir kodla (ör. ABC234) katılınca test oyuncularından oluşan bir lig açılır.
+- **Test araçları (Profil):** "Bir gün ileri", "Sıfırla"; ayrıca Reklam testi: kurulum günü, bugünkü geçiş reklamı sayısı, son reklam olayları, "İlk 2 günü atla", "Sayaçları sıfırla". Yalnızca test modunda görünür.
 
 ### Sunucuda şu an olanlar (hazır ama mobil henüz bağlı değil)
 - Cihaz kimliğiyle üyeliksiz giriş (JWT), bütün oyun uç noktaları, arşiv, istatistik, "Türkiye ne dedi?" dağılımı.
 - Dakikalık işler: soruyu yayına alma, anketi kapatma, dağılımı hesaplama.
-- Arkadaş ligi: `/leagues` uç noktaları, `leagues` ve `league_members` tabloları (migration `Leagues`).
 - Geçici soru girişi: `/admin` (X-Admin-Key). Çift onay kuralı uygulanıyor. Hatalı soru iptali: herkese 100 puan, seri bozulmaz.
 
 ## Nasıl çalıştırılır
@@ -71,7 +71,7 @@ dotnet test                 # Docker açık olmalı
 1. **Gerçek soru içeriği**: test sorularının yerine doğrulanmış sorular (en az 30–60 günlük stok). Soru paneli v1.1'de; şimdilik `/admin`.
 2. **Simgeyi ve açılış ekranını gerçek bir derlemede görmek**: Expo Go kendi simgesini ve açılışını gösterir; development build ya da ilk EAS derlemesinde kontrol edilmeli.
 3. **Reklamlar için kalanlar**: sunucuya ek tahmin / arşiv kilidi / `extra`·`reveal`·`unlock` uç noktaları (kararlar #55), AdMob SSV doğrulaması, development build'de `react-native-google-mobile-ads` + UMP/ATT onayı, gerçek reklam birimi kimlikleri.
-4. **En son: sunucuya bağlama ve yayın**: mobilin gerçek API'ye geçmesi, üretim ayarları, Cloudflare, GitHub Actions, Sentry, Takdir entegrasyonu, lig davet bağlantısı (universal link).
+4. **En son: sunucuya bağlama ve yayın**: mobilin gerçek API'ye geçmesi, üretim ayarları, Cloudflare, GitHub Actions, Sentry, Takdir entegrasyonu.
 5. **v1.1 (plana göre):** soru paneli, Apple/Google ile giriş, webde oynama. Bunlar development build gerektirir.
 
 ## Senin karar vermen gerekenler
@@ -89,5 +89,4 @@ dotnet test                 # Docker açık olmalı
 - iOS'ta hiç çalıştırılmadı (bu makinede mümkün değil).
 - Yeni simge ve açılış ekranı yalnızca dosya olarak kontrol edildi; Expo Go bunları göstermez (bkz. sıradaki adımlar).
 - Reklamlar yalnızca test ekranıyla gösteriliyor; ödüller şimdilik istemcide veriliyor (gerçek sunucuda SSV şart). "Arşiv oyunu bitince geçiş reklamı" (after_archive) emülatörde henüz denenmedi; diğer reklam akışları denendi.
-- Lig davet bağlantısı (`gununsorusu.app/lig/KOD`) yayın aşamasına kadar çalışmaz; kod elle girilir.
 - `appsettings.Development.json` içindeki anahtarlar yalnızca geliştirme içindir; üretimde ortam değişkeni kullanılacak.

@@ -167,28 +167,21 @@ export function repair(s: StreakState, today: string): StreakState {
   return { ...s, lastPlayedDay: fromDayNumber(dayNumber(today) - 1), lastRepairDay: today };
 }
 
-// --- Arkadaş ligi (GununSorusu.Domain/Leagues/League.cs) ---
+// --- Seri yapbozu (docs/kararlar.md #61, #74) ---
+// Günün bütün modları bitince seri bir artar ve yapboza bir parça eklenir. Gün kaçırılınca seri sıfırlanır,
+// parçalar da dağılır (seri kurtarma haftada 1 kez bunu önler). 15. parçada yapboz tamamlanır ve resim
+// koleksiyona girer; ertesi gün yeni resimle yeni yapboz başlar.
 
-export { generateLeagueCode, LEAGUE, LEAGUE_CODE_ALPHABET, normalizeLeagueCode, weekStart } from '../lib/league';
+export const PUZZLE_SIZE = 15;
 
-export interface StandingInput {
-  key: string;
-  name: string;
-  total: number;
-  played: number;
+/** Yapbozdaki parça sayısı: seri 15'in katındayken yapboz dolu görünür. */
+export function puzzlePieces(streak: number): number {
+  return streak <= 0 ? 0 : ((streak - 1) % PUZZLE_SIZE) + 1;
 }
 
-/**
- * Toplam puana göre sıralar; eşit puan aynı sırayı alır, sonraki sıra atlanır (1, 1, 3).
- * Eşitlikte listede önce daha çok gün oynayan, sonra ada göre (Türkçe alfabe) gelir.
- */
-export function rankStandings<T extends StandingInput>(members: T[]): (T & { rank: number })[] {
-  const ordered = [...members].sort(
-    (a, b) => b.total - a.total || b.played - a.played || a.name.localeCompare(b.name, 'tr', { sensitivity: 'base' }),
-  );
-  const out: (T & { rank: number })[] = [];
-  ordered.forEach((m, i) => out.push({ ...m, rank: i > 0 && m.total === ordered[i - 1].total ? out[i - 1].rank : i + 1 }));
-  return out;
+/** Bu seri değerine ulaşan gün bir yapbozu tamamlar mı? */
+export function completesPuzzle(streak: number): boolean {
+  return streak > 0 && streak % PUZZLE_SIZE === 0;
 }
 
 // --- Yardımcılar ---

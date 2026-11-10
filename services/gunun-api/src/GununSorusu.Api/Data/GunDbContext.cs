@@ -1,6 +1,5 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using GununSorusu.Domain.Leagues;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -15,8 +14,6 @@ public sealed class GunDbContext(DbContextOptions<GunDbContext> options) : DbCon
     public DbSet<PollVote> PollVotes => Set<PollVote>();
     public DbSet<PlayerStats> PlayerStats => Set<PlayerStats>();
     public DbSet<QuestionCrowd> QuestionCrowd => Set<QuestionCrowd>();
-    public DbSet<League> Leagues => Set<League>();
-    public DbSet<LeagueMember> LeagueMembers => Set<LeagueMember>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -92,25 +89,6 @@ public sealed class GunDbContext(DbContextOptions<GunDbContext> options) : DbCon
             e.Property(c => c.SolvedPct).HasPrecision(5, 1);
             e.Property(c => c.UnderPct).HasPrecision(5, 1);
             e.Property(c => c.OverPct).HasPrecision(5, 1);
-        });
-
-        b.Entity<League>(e =>
-        {
-            e.ToTable("leagues");
-            e.Property(l => l.Code).HasMaxLength(LeagueCode.Length).IsFixedLength();
-            e.HasIndex(l => l.Code).IsUnique();
-            e.Property(l => l.Name).HasMaxLength(LeagueRules.NameMaxLength);
-            // Kurucu ayrılınca sahiplik devredilir; oyuncu silinirse (ileride KVKK) önce bu çalışmalı.
-            e.HasOne<Player>().WithMany().HasForeignKey(l => l.OwnerId).OnDelete(DeleteBehavior.Restrict);
-        });
-
-        b.Entity<LeagueMember>(e =>
-        {
-            e.ToTable("league_members");
-            e.HasKey(m => new { m.LeagueId, m.PlayerId });
-            e.HasIndex(m => m.PlayerId);
-            e.HasOne<League>().WithMany().HasForeignKey(m => m.LeagueId).OnDelete(DeleteBehavior.Cascade);
-            e.HasOne<Player>().WithMany().HasForeignKey(m => m.PlayerId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

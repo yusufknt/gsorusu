@@ -1,6 +1,6 @@
-import { GameScreen } from '@/components/game/GameScreen';
+import { DayHub } from '@/components/today/DayHub';
 
-/** Bugün sekmesi: uygulama açılınca doğrudan günün sorusu gelir (tanıtım ekranı yok). */
+/** Bugün sekmesi: günün dört modu, ilerleme ve seri yapbozu. */
 export default function TodayScreen() {
-  return <GameScreen />;
+  return <DayHub />;
 }

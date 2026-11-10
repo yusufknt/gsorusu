@@ -3,8 +3,8 @@ import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { serverNow } from '@/api/client';
-import { keys } from '@/api/hooks';
-import type { PlayState, PublicQuestion } from '@/api/types';
+import { keys, usePremium } from '@/api/hooks';
+import type { DaySet } from '@/api/types';
 import { useToast } from '@/components/ui';
 import { addDays, istanbulDay } from '@/lib/format';
 
@@ -38,16 +38,14 @@ const AdsContext = createContext<AdsCtx | null>(null);
 
 const today = () => istanbulDay(serverNow());
 
-/** Bugünün sorusu bitti mi? Bitmeden (ya da yüklenmeden) hiçbir geçiş reklamı gösterilmez (plan A11, kural 1). */
+/** Bugünün bütün modları bitti mi? Bitmeden (ya da yüklenmeden) hiçbir geçiş reklamı gösterilmez (plan A11, kural 1). */
 function todayDone(qc: QueryClient): boolean {
-  const q = qc.getQueryData<PublicQuestion>(keys.question('today'));
-  if (!q) return false;
-  if (q.cancelled) return true;
-  return !!qc.getQueryData<PlayState>(keys.play(q.day))?.finished;
+  return !!qc.getQueryData<DaySet>(keys.day('today'))?.complete;
 }
 
 /**
- * Reklamların tek giriş noktası. Ekranlar AdMob'u değil bu bağlamı kullanır; development
+ * Reklamların tek giriş noktası. Premium aboneye reklam gösterilmez: ödüllü reklamın ödülü doğrudan verilir,
+ * geçiş reklamı atlanır. Ekranlar AdMob'u değil bu bağlamı kullanır; development
  * build'e geçince yalnızca `present` içindeki test reklamı ekranı AdMob çağrısıyla değişir.
  */
 export function AdsProvider({ children }: { children: ReactNode }) {
@@ -57,6 +55,11 @@ export function AdsProvider({ children }: { children: ReactNode }) {
   const ledgerRef = useRef<AdLedger | null>(null);
   const [request, setRequest] = useState<MockAdRequest | null>(null);
   const pending = useRef<((o: MockAdOutcome) => void) | null>(null);
+  const premium = usePremium().data?.active ?? false;
+  const premiumRef = useRef(premium);
+  useEffect(() => {
+    premiumRef.current = premium;
+  }, [premium]);
 
   const commit = useCallback((next: AdLedger) => {
     ledgerRef.current = next;
@@ -98,6 +101,10 @@ export function AdsProvider({ children }: { children: ReactNode }) {
   const showRewarded = useCallback(
     async (placement: RewardedPlacement) => {
       const at = serverNow();
+      if (premiumRef.current) {
+        logAdEvent({ type: 'ad_rewarded', placement, at, reason: 'premium' });
+        return true;
+      }
       const outcome = await present({ kind: 'rewarded', placement });
       if (outcome === null) {
         logAdEvent({ type: 'ad_blocked', placement, at, reason: 'busy' });
@@ -120,6 +127,10 @@ export function AdsProvider({ children }: { children: ReactNode }) {
       const l = ledgerRef.current;
       const now = serverNow();
       const t = today();
+      if (premiumRef.current) {
+        logAdEvent({ type: 'ad_blocked', placement, at: now, reason: 'premium' });
+        return false;
+      }
       if (!l) {
         logAdEvent({ type: 'ad_blocked', placement, at: now, reason: 'not_ready' });
         return false;

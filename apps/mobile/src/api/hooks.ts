@@ -1,39 +1,38 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api } from './client';
-import type { ArchiveItem, Crowd, League, LeagueSummary, Me, PlayState, PublicQuestion, Stats } from './types';
+import type { Crowd, DailyMode, DayRank, DaySet, Me, PlayState, PracticeState, PremiumState, PublicQuestion, Stats } from './types';
 
 export const keys = {
-  question: (day: string) => ['question', day] as const,
-  play: (day: string) => ['play', day] as const,
-  crowd: (day: string) => ['crowd', day] as const,
+  day: (day: string) => ['day', day] as const,
+  question: (day: string, mode: DailyMode) => ['question', day, mode] as const,
+  play: (day: string, mode: DailyMode) => ['play', day, mode] as const,
+  crowd: (day: string, mode: DailyMode) => ['crowd', day, mode] as const,
   stats: ['stats'] as const,
   archive: ['archive'] as const,
   me: ['me'] as const,
-  leagues: ['leagues'] as const,
-  league: (id: string, week: string | null) => ['leagues', id, week ?? 'current'] as const,
+  rank: (day: string) => ['rank', day] as const,
+  practice: ['practice', 'pahali'] as const,
+  premium: ['premium'] as const,
 };
 
-/** day verilmezse bugünün sorusu. */
-export function useQuestion(day?: string) {
-  return useQuery({
-    queryKey: keys.question(day ?? 'today'),
-    queryFn: () => api<PublicQuestion>('GET', day ? `/q/${day}` : '/q/today'),
-  });
+/** Günün dört modlu seti; day verilmezse bugün. */
+export function useDay(day?: string) {
+  return useQuery({ queryKey: keys.day(day ?? 'today'), queryFn: () => api<DaySet>('GET', day ? `/days/${day}` : '/days/today') });
 }
 
-export function usePlay(day: string | undefined) {
-  return useQuery({
-    queryKey: keys.play(day ?? ''),
-    queryFn: () => api<PlayState>('GET', `/plays/${day}`),
-    enabled: !!day,
-  });
+export function useQuestion(day: string | undefined, mode: DailyMode) {
+  return useQuery({ queryKey: keys.question(day ?? '', mode), queryFn: () => api<PublicQuestion>('GET', `/q/${day}/${mode}`), enabled: !!day });
 }
 
-export function useCrowd(day: string, enabled: boolean) {
+export function usePlay(day: string | undefined, mode: DailyMode) {
+  return useQuery({ queryKey: keys.play(day ?? '', mode), queryFn: () => api<PlayState>('GET', `/plays/${day}/${mode}`), enabled: !!day });
+}
+
+export function useCrowd(day: string, mode: DailyMode, enabled: boolean) {
   return useQuery({
-    queryKey: keys.crowd(day),
-    queryFn: () => api<Crowd>('GET', `/q/${day}/crowd`),
+    queryKey: keys.crowd(day, mode),
+    queryFn: () => api<Crowd>('GET', `/q/${day}/${mode}/crowd`),
     enabled,
     refetchInterval: 5 * 60_000,
   });
@@ -43,8 +42,21 @@ export function useStats() {
   return useQuery({ queryKey: keys.stats, queryFn: () => api<Stats>('GET', '/stats/me') });
 }
 
+/** Son 7 günün setleri. */
 export function useArchive() {
-  return useQuery({ queryKey: keys.archive, queryFn: () => api<ArchiveItem[]>('GET', '/plays/archive') });
+  return useQuery({ queryKey: keys.archive, queryFn: () => api<DaySet[]>('GET', '/plays/archive') });
+}
+
+/** Ödüllü reklamdan sonra kilitli arşiv gününü açar. */
+export function useUnlockDay(day: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api<DaySet>('POST', `/days/${day}/unlock`),
+    onSuccess: (set) => {
+      qc.setQueryData(keys.day(day), set);
+      void qc.invalidateQueries({ queryKey: keys.archive });
+    },
+  });
 }
 
 export function useMe() {
@@ -55,11 +67,7 @@ export function useUpdateMe() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: Partial<Pick<Me, 'displayName' | 'city' | 'notifyHour'>>) => api<Me>('PATCH', '/me', body),
-    onSuccess: (me) => {
-      qc.setQueryData(keys.me, me);
-      // Görünen ad liglerdeki sıralamada da görünür.
-      void qc.invalidateQueries({ queryKey: keys.leagues });
-    },
+    onSuccess: (me) => qc.setQueryData(keys.me, me),
   });
 }
 
@@ -75,14 +83,16 @@ export type PlayAction =
   | { kind: 'unlock' }
   | { kind: 'answer'; option: number }
   | { kind: 'compare'; round: number; choice: number }
-  | { kind: 'poll'; option: number; predictedPct: number };
+  | { kind: 'poll'; option: number; predictedPct: number }
+  /** "Hangi ünlü?" tahmini (listedeki tam ad). */
+  | { kind: 'celeb'; name: string };
 
 /** Tüm oyun işlemleri; sunucunun döndürdüğü güncel durum önbelleğe yazılır. */
-export function usePlayAction(day: string) {
+export function usePlayAction(day: string, mode: DailyMode) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (a: PlayAction) => {
-      const path = `/plays/${day}`;
+      const path = `/plays/${day}/${mode}`;
       switch (a.kind) {
         case 'start':
           return api<PlayState>('POST', `${path}/start`);
@@ -102,21 +112,27 @@ export function usePlayAction(day: string) {
           return api<PlayState>('POST', `${path}/compare`, { round: a.round, choice: a.choice });
         case 'poll':
           return api<PlayState>('POST', `${path}/poll`, { option: a.option, predictedPct: a.predictedPct });
+        case 'celeb':
+          return api<PlayState>('POST', `${path}/celeb`, { name: a.name });
       }
     },
     onSuccess: (state) => {
-      qc.setQueryData(keys.play(day), state);
+      qc.setQueryData(keys.play(day, mode), state);
+      // Hub kartları (başladı/bitti/sonuç) her işlemde güncellenir.
+      void qc.invalidateQueries({ queryKey: ['day'] });
       // Arşivde ilk işlem günün ücretsiz hakkını kullanır; listedeki kilitler değişir.
       if (state.archive) void qc.invalidateQueries({ queryKey: keys.archive });
       if (state.finished) {
         void qc.invalidateQueries({ queryKey: keys.stats });
         void qc.invalidateQueries({ queryKey: keys.archive });
-        void qc.invalidateQueries({ queryKey: keys.crowd(day) });
-        void qc.invalidateQueries({ queryKey: keys.leagues });
+        void qc.invalidateQueries({ queryKey: keys.crowd(day, mode) });
+        // Pahalı bitince sınırsız mod açılır.
+        void qc.invalidateQueries({ queryKey: keys.practice });
+        void qc.invalidateQueries({ queryKey: ['rank'] });
       }
     },
     // Çakışmada (ör. iki cihazdan aynı anda) en güncel durumu sunucudan al.
-    onError: () => void qc.invalidateQueries({ queryKey: keys.play(day) }),
+    onError: () => void qc.invalidateQueries({ queryKey: keys.play(day, mode) }),
   });
 }
 
@@ -124,58 +140,67 @@ export function useStreakRepair() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => api<unknown>('POST', '/streak/repair'),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: keys.stats }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: keys.stats });
+      void qc.invalidateQueries({ queryKey: ['day'] });
+    },
   });
 }
 
-// --- Arkadaş ligi ---
-
-export function useLeagues() {
-  return useQuery({ queryKey: keys.leagues, queryFn: () => api<LeagueSummary[]>('GET', '/leagues') });
+/** Gün bitince: oyuncuların yüzde kaçından iyi olduğun. */
+export function useDayRank(day: string | undefined, enabled: boolean) {
+  return useQuery({ queryKey: keys.rank(day ?? ''), queryFn: () => api<DayRank>('GET', `/days/${day}/rank`), enabled: enabled && !!day });
 }
 
-/** week: haftanın Pazartesisi; null = bu hafta. */
-export function useLeague(id: string | undefined, week: string | null) {
-  return useQuery({
-    queryKey: keys.league(id ?? '', week),
-    queryFn: () => api<League>('GET', week ? `/leagues/${id}?week=${week}` : `/leagues/${id}`),
-    enabled: !!id,
-    // Hafta değiştirirken eski tablo yerinde kalsın, ekran boşalıp dolmasın.
-    placeholderData: keepPreviousData,
-  });
+// --- Sınırsız "Hangisi pahalı?" ---
+
+export function usePractice() {
+  return useQuery({ queryKey: keys.practice, queryFn: () => api<PracticeState>('GET', '/practice/pahali') });
 }
 
-function useLeagueMutation<V>(fn: (v: V) => Promise<League>) {
+function usePracticeMutation<V>(fn: (v: V) => Promise<PracticeState>, after?: () => void) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: fn,
-    onSuccess: (league) => {
-      qc.setQueryData(keys.league(league.id, null), league);
-      void qc.invalidateQueries({ queryKey: keys.leagues, refetchType: 'active' });
+    onSuccess: (state) => {
+      qc.setQueryData(keys.practice, state);
+      after?.();
     },
   });
 }
 
-export function useCreateLeague() {
-  return useLeagueMutation((name: string) => api<League>('POST', '/leagues', { name }));
+/** Yeni 10 turluk set (premium; sınırsız). */
+export function useOpenPracticeSet() {
+  return usePracticeMutation(() => api<PracticeState>('POST', '/practice/pahali/sets'));
 }
 
-export function useJoinLeague() {
-  return useLeagueMutation((code: string) => api<League>('POST', '/leagues/join', { code }));
+export function useFinishPracticeSet() {
+  return usePracticeMutation((correct: number) => api<PracticeState>('POST', '/practice/pahali/finish', { correct }));
 }
 
-/** Başka bir üyeyi çıkarır (yalnızca lig sahibi). */
-export function useRemoveMember(leagueId: string) {
-  return useLeagueMutation((playerId: string) => api<League>('DELETE', `/leagues/${leagueId}/members/${playerId}`));
+// --- Premium (aylık abonelik) ---
+
+export function usePremium() {
+  return useQuery({ queryKey: keys.premium, queryFn: () => api<PremiumState>('GET', '/me/premium'), staleTime: 5 * 60_000 });
 }
 
-export function useLeaveLeague(leagueId: string) {
+function usePremiumMutation(path: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (myId: string) => api<void>('DELETE', `/leagues/${leagueId}/members/${myId}`),
-    onSuccess: () => {
-      qc.removeQueries({ queryKey: ['leagues', leagueId] });
-      void qc.invalidateQueries({ queryKey: keys.leagues });
+    mutationFn: () => api<PremiumState>('POST', path),
+    onSuccess: (state) => {
+      qc.setQueryData(keys.premium, state);
+      void qc.invalidateQueries({ queryKey: keys.practice });
     },
   });
+}
+
+/** Test satın alması; gerçek sürümde mağaza aboneliği başlatılır, sunucu makbuzu doğrular. */
+export function usePurchasePremium() {
+  return usePremiumMutation('/me/premium/purchase');
+}
+
+/** İptal: dönem sonuna kadar premium sürer. */
+export function useCancelPremium() {
+  return usePremiumMutation('/me/premium/cancel');
 }

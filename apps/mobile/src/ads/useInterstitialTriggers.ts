@@ -1,38 +1,28 @@
-import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { usePathname } from 'expo-router';
 import { useEffect, useRef } from 'react';
 
-import { keys } from '@/api/hooks';
-import type { PlayState } from '@/api/types';
-
 import { useAds } from './AdsProvider';
-import { logAdEvent } from './events';
 
-const TABS = new Set(['index', 'stats', 'leagues', 'archive', 'profile']);
+const TABS = new Set(['index', 'stats', 'profile']);
 
-/** "/" → index, "/archive/2026-11-04" → archive; sekme dışı ekranlar (ör. "/how-to-play") → null. */
+/**
+ * "/" → index, "/stats" → stats; sekme dışı ekranlar (oyun "/play/kac", arşiv "/archive",
+ * "Nasıl oynanır?") → null. Oyun ekranları sekme değildir; oyunun ortasında reklam çıkmaz.
+ */
 function tabOf(path: string): string | null {
   const first = path.split('/')[1] || 'index';
   return TABS.has(first) ? first : null;
 }
 
-/** Arşivde yarım kalmış bir oyundan çıkılıyorsa (bitmemiş soru ekranı) reklam yok. */
-function leavingUnfinishedGame(qc: QueryClient, path: string): boolean {
-  const m = path.match(/^\/archive\/(\d{4}-\d{2}-\d{2})$/);
-  if (!m) return false;
-  return !qc.getQueryData<PlayState>(keys.play(m[1]))?.finished;
-}
-
 /**
  * Sekme geçişlerinde geçiş reklamı (plan A11):
- *  - Bugün'den başka sekmeye geçerken, günün sorusu bittiyse → `after_result` (günde 1).
+ *  - Bugün'den başka sekmeye geçerken, günün seti bittiyse → `after_result` (günde 1).
  *  - Diğer sekme geçişlerinde, yeterince geçişten sonra → `tab_switch`.
- * Sıklık sınırları ve "bugünün sorusu bitti mi?" kontrolü AdsProvider'da; burada yalnızca
- * sekme değişimi ve yarım kalan arşiv oyunu ayıklanır.
+ * Sıklık sınırları ve "bugünün seti bitti mi?" kontrolü AdsProvider'da; burada yalnızca
+ * sekme değişimi ayıklanır.
  */
 export function useInterstitialTriggers() {
   const pathname = usePathname();
-  const qc = useQueryClient();
   const { maybeShowInterstitial, noteTabSwitch } = useAds();
   const prev = useRef(pathname);
 
@@ -46,10 +36,6 @@ export function useInterstitialTriggers() {
     if (!fromTab || fromTab === to) return;
 
     const placement = fromTab === 'index' ? 'after_result' : 'tab_switch';
-    if (leavingUnfinishedGame(qc, from)) {
-      logAdEvent({ type: 'ad_blocked', placement, at: Date.now(), reason: 'game_in_progress' });
-      return;
-    }
     noteTabSwitch();
     void (async () => {
       // Kısa gecikme: yeni sekme çizilsin, reklam geçişin ortasında açılmasın.
@@ -57,5 +43,5 @@ export function useInterstitialTriggers() {
       if (placement === 'after_result' && (await maybeShowInterstitial('after_result'))) return;
       await maybeShowInterstitial('tab_switch');
     })();
-  }, [pathname, qc, maybeShowInterstitial, noteTabSwitch]);
+  }, [pathname, maybeShowInterstitial, noteTabSwitch]);
 }

@@ -10,6 +10,7 @@ using GununSorusu.Api.Jobs;
 using GununSorusu.Domain;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http.Json;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -22,6 +23,9 @@ services.Configure<GameOptions>(config.GetSection("Game"));
 services.Configure<AuthOptions>(config.GetSection("Auth"));
 services.Configure<AdminOptions>(config.GetSection("Admin"));
 services.Configure<RateLimitOptions>(config.GetSection("RateLimit"));
+services.Configure<ProxyOptions>(config.GetSection("Proxy"));
+services.AddOptions<ForwardedHeadersOptions>()
+    .Configure<IOptions<ProxyOptions>>((fwd, proxy) => ProxySetup.Apply(fwd, proxy.Value));
 services.Configure<JobOptions>(config.GetSection("Jobs"));
 
 services.AddSingleton(TimeProvider.System);
@@ -88,7 +92,10 @@ services.AddRateLimiter(o =>
 var app = builder.Build();
 
 // Yanlış yapılandırmayla açılmasın: imza anahtarı ilk istekte değil, başlangıçta denetlenir.
-TokenService.SigningKey(app.Services.GetRequiredService<IOptions<AuthOptions>>().Value);
+var authOptions = app.Services.GetRequiredService<IOptions<AuthOptions>>().Value;
+TokenService.SigningKey(authOptions);
+StartupGuards.RejectDevSecrets(app.Environment.EnvironmentName, authOptions, app.Services.GetRequiredService<IOptions<AdminOptions>>().Value);
+_ = app.Services.GetRequiredService<IOptions<ForwardedHeadersOptions>>().Value; // geçersiz Proxy ayarı başlangıçta düşsün
 
 if (config.GetValue("Database:MigrateOnStartup", false))
 {
@@ -98,6 +105,8 @@ if (config.GetValue("Database:MigrateOnStartup", false))
 
 if (config.GetValue("Seed:DevQuestions", false)) await DevSeeder.SeedAsync(app.Services);
 
+// Hız sınırı ve günlükler gerçek istemci IP'sini görsün diye her şeyden önce.
+app.UseForwardedHeaders();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 app.UseAuthentication();

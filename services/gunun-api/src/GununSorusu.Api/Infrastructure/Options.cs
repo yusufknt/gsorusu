@@ -28,6 +28,18 @@ public sealed class AdminOptions
     public string ApiKey { get; set; } = "";
 }
 
+public sealed class ProxyOptions
+{
+    /// <summary>
+    /// X-Forwarded-For başlığına güvenilen proxy adresleri (ör. Caddy). Boşsa yalnızca loopback güvenilir.
+    /// Ortam değişkeni: Proxy__KnownProxies__0=10.0.0.5
+    /// </summary>
+    public string[] KnownProxies { get; set; } = [];
+
+    /// <summary>Güvenilen proxy ağları, CIDR (ör. Docker ağı 172.16.0.0/12). Ortam değişkeni: Proxy__KnownNetworks__0</summary>
+    public string[] KnownNetworks { get; set; } = [];
+}
+
 public sealed class RateLimitOptions
 {
     /// <summary>Oyuncu (ya da IP) başına dakikalık istek sınırı.</summary>
